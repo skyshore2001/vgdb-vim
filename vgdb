@@ -1,0 +1,529 @@
+#!/usr/bin/perl
+=pod
+usage1:
+vgdb cpp1
+(start gvim)
+
+usage2:
+open vim/gvim and run :VGdb cpp1
+
+usage3 (debug vgdb):
+export VGDB_DEBUG=1
+vgdb cpp1
+
+=cut
+
+use strict;
+use warnings;
+
+###### config {{{
+my $IS_MSWIN = $^O eq 'MSWin32';
+
+my $TTY;
+if (! $IS_MSWIN)
+{
+	$TTY = `tty`;
+	mychop($TTY);
+	if ($TTY =~ /\s/ || $TTY !~ /^\//) {
+		$TTY = "";
+	}
+}
+#}}}
+
+package CommInet; # {{{
+our $VGDB_PORT;
+if ($ENV{VGDB_PORT}) {
+	$VGDB_PORT = $ENV{VGDB_PORT};
+}
+else {
+	$ENV{VGDB_PORT} = $VGDB_PORT = time() % 10000 + 30000;
+}
+
+use IO::Socket::INET;
+sub new # ({isclient=>0})
+{
+	my $clsName = shift;
+	my %opt = @_;
+	my $this = bless {
+		type => 'inet',
+		isclient => $opt{isclient}
+	}, $clsName;
+	if ($this->{isclient}) {
+		$this->{sock} = IO::Socket::INET->new (
+			PeerAddr => '127.0.0.1',
+			PeerPort => $VGDB_PORT,
+			Proto => 'tcp',
+		) or die "cannot open socket: $!";
+	}
+	else {
+		$this->{sock} = IO::Socket::INET->new (
+			#LocalAddr => '127.0.0.1',
+			LocalPort => $VGDB_PORT,
+			Reuse => 1,
+# 			ReuseAddr => 1,
+# 			ReusePort => 1,
+			Proto => 'tcp',
+			Listen => 1,
+		) or die "cannot open socket: $!";
+	}
+	$this->{sock}->autoflush(1);
+	$this;
+}
+
+sub destroy
+{
+	my $this = shift;
+	if ($this->{session}) {
+		$this->{session}->close();
+	}
+	$this->{sock}->close();
+}
+
+sub put # ($line)
+{
+	my $this = shift;
+	my $line = $_[0];
+	my $sck = $this->{isclient}? $this->{sock}: $this->{session} ;
+	print $sck $line;
+}
+
+sub get
+{
+	my $this = shift;
+	my $sck;
+	local $_;
+	if ($this->{isclient}) {
+		$sck = $this->{sock};
+	}
+	else {
+		if ($this->{session}) {
+			$this->{session}->close();
+			delete $this->{session};
+		}
+		$sck = $this->{session} = $this->{sock}->accept();
+	}
+	$_ = <$sck>;
+}
+
+# sub accept
+# {
+# 	my $this = shift;
+# 	if ($this->{session}) {
+# 		$this->{session}->close();
+# 		delete $this->{session};
+# 	}
+# 	$this->{session} = $this->{sock}->accept();
+# 	$this->{session}->autoflush(1);
+# 	1;
+# }
+#}}}
+
+package CommMem; # {{{
+sub new # ()
+{
+	my $clsName = shift;
+	my $this = bless {
+		type => 'mem',
+		val => '',
+	}, $clsName;
+	$this;
+}
+
+sub destroy
+{
+	my $this = shift;
+}
+
+sub put # ($line)
+{
+	my $this = shift;
+	$this->{var} .= $_[0];
+}
+
+sub get
+{
+	my $this = shift;
+	local $_ = $this->{var};
+	$this->{var} = '';
+	$_;
+}
+#}}}
+
+package main;
+my $isclient = ($ARGV[0] && $ARGV[0] eq '-c');
+
+###### run as client {{{
+sub runClient # ($cmds)
+{
+	my ($cmds) = @_;
+	my $comm = CommInet->new(isclient=> 1);
+	$comm->put("$cmds\n");
+
+	my $line;
+	while(defined ($line = $comm->get()))
+	{
+		print $line;
+	}
+	$comm->destroy();
+}
+
+if ($isclient) {
+	runClient($ARGV[1]);
+	goto END_SCRIPT;
+}
+
+#}}}
+
+###### toolkit {{{
+sub mychop
+{
+	$_[0] =~ s/[ \r\n]+$//;
+}
+
+sub msg # ($msg, [$force=0])
+{
+	print NEWERR $_[0] if $ENV{VGDB_DEBUG} || $_[1];
+}
+#}}}
+
+###### run as server
+#my $VIM_EXE = 'gvim --nofork';
+my $VIM_EXE = 'gvim -f';
+# !!! use -f for --nofork because if on MSWin32 vim installs a gvim.bat that does not support --nofork.
+
+my $calledByVim = $ARGV[0] && $ARGV[0] eq '-vi';
+if ($calledByVim) {
+	shift @ARGV;
+}
+
+# setup pipes for communication
+pipe(VIM_RD, GDB_WR);  
+pipe(GDB_RD, VIM_WR);
+
+# backup old OUT/ERR. To work around bugs on windows
+#open NEWOUT, ">&STDOUT";
+open NEWERR, ">&STDERR";
+
+my $gdb_task;
+my $msg_task;
+unless(defined($gdb_task = fork()))
+{
+	die("Unable to fork");
+}
+
+###### gdb task {{{
+if($gdb_task == 0)
+{
+	msg "[$$] GDB Task\n";
+	close VIM_RD;
+	close VIM_WR;
+
+	open(STDERR, ">&GDB_WR")     || die "Can't redirect stdout";
+	open(STDOUT, ">&GDB_WR")     || die "Can't redirect stdout";
+    open(STDIN, "<&GDB_RD")    || die "Can't redirect stdin";
+	close GDB_WR;
+	close GDB_RD;
+
+# 	select(STDOUT);    $| = 1; # make unbuffered
+# 	select(STDERR);    $| = 1; # make unbuffered
+
+	# -q: no version info; -f: output for emacs (file:lineno after each cmd)
+	my $gdbcmd = "gdb -f -q ";
+	#my $gdbcmd = "gdb --interpreter=mi ";
+	my $params = join(' ', @ARGV) || '';
+	if (!$IS_MSWIN) {
+		if ($params !~ /tty/ && $TTY) {
+			$gdbcmd .= " --tty=$TTY";
+		}
+	}
+	$gdbcmd .= " $params";
+	msg "[$$] start gdb: '$gdbcmd'\n";
+	if(system($gdbcmd) != 0)
+	#if(system("gdb", "--interpreter=mi", "-q", "--args", @ARGV) != 0)
+	{
+		print NEWERR "[$$] start GDB error: $!\n";
+#		kill(15, getppid());
+	}
+	print STDERR "%%q\n"; # quit signal to the msg task
+	close STDERR;
+	close STDOUT;
+	msg "[$$] GDB quits.\n";
+	exit;
+}
+
+close GDB_RD;
+close GDB_WR;
+
+unless(defined($msg_task = fork()))
+{
+	die("Unable to fork");
+}
+
+sub parseGdbLine  # ($comm, $line, $hideout)
+{
+	my $comm = $_[0];
+	return unless defined $comm;
+
+	local $_ = $_[1];
+	my $hideout = $_[2];
+	my $cmd;
+	if (! defined($_)) {
+		$cmd = "quit()";
+		$hideout =1;
+	}
+	elsif (s/\(gdb\)//g && /^\s*$/) {
+		$hideout = 1;
+	}
+	# set a BP:
+	# 'b main' -> 'Breakpoint 2 at 0x4013cb: file cpp1.cpp, line 13.'
+	# 'Breakpoint 2 (/home/builder/depot/BUSMB_B1/SBO/9.01_DEV/BuildBuilder/CreatorDll/TmScrParser.cpp:115) pending.'
+	# encounter a BP:
+	# 'Breakpoint 11, DBMCSqlStatement::ExecDirect (this=0x7fffffff9350, query=..., env=0x637760) at ../Infrastructure/Engines/DBM/__DBMC_Statement.cpp:178'
+	elsif (/^Breakpoint (\d+) at [^:]+: file ([^,]+), line (\d+)/ || /^Breakpoint (\d+) \((..[^:]+):(\d+)\) (pending)./ || /^Breakpoint (\d+).* at (..[^:]+):(\d+)/) {
+		my ($id, $f, $ln, $hint) = ($1, $2, $3, $4 || '');
+		$f =~ s/\\/\//g;
+		$cmd = "setbp($id, \"$f\", $ln, \"$hint\")";
+	}
+	# 'clear cpp1.cpp:13' -> 'Deleted breakpoint 1'
+	elsif (/^Deleted breakpoint (\d+)/) { 
+		$cmd = "delbp($1)";
+	}
+	# '[Inferior 1 (process 11468) exited normally]'
+	# 'Kill the program being debugged? (y or n) [answered Y; input not from terminal]'
+	# 'The program is not being run.'
+	elsif (/Inferior/ || /^Kill the program/ || /^Program exited/ || /^The program is not being run/) {
+		$cmd = "delpos()";
+	}
+	# cd bin
+	# Working directory c:\prog\myprog\bin.
+	elsif (/^Working directory (.+)\.$/) {
+		my $d = $1;
+		$d =~ s/[ \\]/\\$&/g;
+		$cmd = "exe(\"cd $d\")";
+	}
+	# 'r' -> 'C:\Users\i058537\cpp1.cpp:13:191:beg:0x4013cb'
+	elsif (/^\032\032(..[^:]*):(\d+)/) {
+		my ($f, $ln) = ($1, $2);
+		$f =~ s/\\/\//g;
+		$cmd = "setpos(\"$f\", $ln)";
+		$hideout =1;
+	}
+	$comm->put("$_\n") unless $hideout;
+	if (defined $cmd) {
+		$comm->put("vi:$cmd\n");
+		msg "=== 'vi:$cmd'\n";
+	}
+}
+
+# exec gdb command, write result to $comm
+# return undef - quit command
+sub execCmd # ($comm, $cmd, [$hideout=0])
+{
+	my ($comm, $cmd, $hideout) = @_;
+	print VIM_WR "$cmd\n";
+	msg "(gdb) '$cmd'\n";
+	while(<VIM_RD>)
+	{
+		mychop($_);
+		msg ">>> '$_'\n", !/^\032/;
+		last if /^%%q$/;  # quit signal from gdb task. (bugfix on MSWindows)
+		parseGdbLine($comm, $_, $hideout);
+		if(/\(gdb\)$/) {
+			return 1;
+		}
+	}
+	# gdb quits
+	parseGdbLine($comm, undef);
+	return;
+}
+
+=example:
+1. define in autoexp.dat:
+SBOString= <m_strData->m_str>, len=<m_strData->m_len>
+
+2. demo session with gdb:
+(gdb) whatis s
+type = SBOString
+(gdb) p &(s)
+$32 = (SBOString *) 0x28ff0c
+(gdb) p $32->m_strData->m_str
+$33 = 0x661948 L"3.141500"
+(gdb) p $32->m_strData->m_len
+$34 = 8
+
+3. the final show of vgdb:
+L"3.141500", len=8
+
+=cut
+
+# throw 'quit' if gdb quits; otherwize return the cmd result
+sub getCmdResult # ($commMem, $cmd)
+{
+	my $rv = execCmd($_[0], $_[1]);
+	die 'quit' unless defined $rv; # encounter 'quit'
+	$_[0]->get();
+}
+
+my $last_mtime = 0;
+my %autoexp;
+sub loadAutoexp
+{
+	my $f = "autoexp.dat";
+	unless (-r $f) {
+		my $path;
+		if ($IS_MSWIN) {
+			$path = $ENV{HOMEDRIVE} . $ENV{HOMEPATH};
+		}
+		else {
+			$path = $ENV{HOME};
+		}
+		$f = "$path/$f";
+	}
+	return unless -r $f;
+	my @st = stat($f);
+	my $mtime = $st[9];
+	return if ($mtime <= $last_mtime);
+	$last_mtime = $mtime;
+
+	%autoexp = ();
+	open F, "$f";
+	while (<F>) {
+		if (/(\S+)\s*=\s*(.*?)\s*$/) {
+			$autoexp{$1} = $2;
+		}
+	}
+	close F;
+}
+
+# return undef - quit command; 1 - Ok
+sub execPreviewCmd # ($comm, $expr, $hideout)
+{
+	my ($comm, $expr, $hideout) = @_;
+	my $commMem = CommMem->new();
+	my ($type, $isptr);
+	loadAutoexp();
+	local $_;
+	eval {
+		# 1. get type
+		$_ = getCmdResult($commMem, "whatis $expr");
+		return 1 if !$_;
+		mychop($_);
+		unless(/^type = (.*)$/) {
+			$comm->put($_);
+			return 1;
+		}
+		$type = $1;
+		$comm->put("($type) ");
+		my $mainType = $type;
+		while ($type =~ /\w+/g) {
+			if ($& ne 'const') {
+				$mainType = $&;
+			}
+		}
+		$isptr =1 if $type =~ /\*/;
+		unless (exists $autoexp{$mainType}) {
+			return execCmd($comm, "p $expr", $hideout);
+		}
+
+		# 2. get pointer
+		unless ($isptr) {
+			$_ = getCmdResult($commMem, "p &($expr)");
+			if (! /(\$\d+) = /) {
+				return execCmd($comm, "p $expr", $hideout);
+			}
+			$expr = $1;
+		}
+		# 3. eval
+		# e.g. "<m_strData->m_str, su>, <m_strData->m_len>";
+		my $expand = sub { # ($expandExpr)
+			my $expandExpr = shift;
+			my $showType = '';
+			# get and remove $showType from expandExpr: "m_strData->m_str, su" -> "m_strData->m_str"
+			$expandExpr =~ s/\s*,\s*(\S+)\s*$/$showType=$1; ''/e;
+			# set expandExpr="($expr)->m_strData->m_str"
+			$expandExpr =~ s/(?<![.>])\b(?=[a-zA-Z_])/($expr)->/g;
+			local $_ = getCmdResult($commMem, "p $expandExpr");
+			s/^.+= (0x\S+ )?//;
+			s/\n//;
+			$_;
+		};
+		# e.g. "m_strData->m_str" -> L"Hello"
+		$_ = $autoexp{$mainType};
+		s/<(.*?(?<!-))>/&$expand($1)/eg;
+		$comm->put($_);
+	};
+	if ($@ =~ /^quit /) {
+		$comm->put($commMem->get());
+		return undef;
+	}
+	1;
+}
+#}}}
+
+###### msg task {{{
+select(VIM_WR);    $| = 1; # make unbuffered
+if($msg_task == 0)
+{
+	msg "[$$] msg task\n";
+	execCmd(undef, 'set prompt (gdb)\n');
+	if ($IS_MSWIN) {
+    execCmd(undef, 'set new-console on');
+	}
+    execCmd(undef, 'set print pretty on');
+    execCmd(undef, 'set breakpoint pending on');
+
+	my $comm = CommInet->new();
+	msg "[$$] msg task start listening at $VGDB_PORT\n";
+	my $gdbQuit = 0;
+	while(! $gdbQuit)
+	{
+		my $cmds = $comm->get() || '';
+		my $hideout = $cmds =~ s/^@//;
+		mychop($cmds);
+		$cmds = ' ' if $cmds eq '';
+		for (split /;/, $cmds) {
+			s/^\s+//;
+			s/\s+$//;
+
+			my $rv;
+			if (/^p\s+(.+)$/) {
+				$rv = execPreviewCmd($comm, $1, $hideout);
+			}
+			else {
+				$rv = execCmd($comm, $_, $hideout);
+			}
+			unless (defined $rv) {
+				$gdbQuit = 1;
+				last;
+			}
+		}
+	}
+	$comm->destroy();
+	msg "[$$] msg task exits\n";
+	exit;
+}
+#}}}
+
+###### main task {{{
+unless ($calledByVim)
+{
+	msg "[$$] main: starting VIM.\n";
+
+	system($VIM_EXE . ' -c "call VGdb_open()"');
+
+#	print VIM_WR "quit\n";
+
+#	kill(15, $gdb_task, $msg_task);
+}
+else 
+{
+	msg "[$$] Main Task\n";
+}
+
+while(wait() != -1)
+{
+}
+#}}}
+
+END_SCRIPT:
+# vim: set foldmethod=marker :

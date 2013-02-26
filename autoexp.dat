@@ -1,0 +1,4 @@
+SBOString= str=<m_strData->m_str>, len=<m_strData->m_len>
+MONEY= <m_data[0]/1e6>
+_DBM_DataAccessGate= tbl=<m_tableDef.m_alias.m_strData->m_str>, size=<m_dataCount>, bcksize=<m_backupCount>, dirty=<m_dataBufIsDirty>
+

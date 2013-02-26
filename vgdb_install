@@ -1,0 +1,9 @@
+#!/bin/sh
+
+BIN=/usr/local/bin
+VIMFILES=/usr/share/vim/site
+cp ./vgdb $BIN/
+#cp ./libvgdbc.so /usr/lib64
+cp ./vgdb.vim $VIMFILES/plugin/vgdb.vim
+cp ./__README__.txt $VIMFILES/doc/vgdb.txt
+vim -c "helptags $VIMFILES\doc | h vgdb.txt | only"
