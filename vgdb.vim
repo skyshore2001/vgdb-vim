@@ -18,6 +18,7 @@ let s:ismswin=has('win32')
 let loaded_vgdb = 1
 let s:vgdb_winheight = 10
 let s:vgdb_bufname = "__VGDB__"
+let s:vgdb_prompt = '(gdb) '
 
 " used by system-call style
 let s:vgdb_client = "vgdb -c" " on MSWin, actually the vgdb.bat is called in the search path
@@ -45,7 +46,6 @@ if g:vgdb_uselibcall
 endif
 
 " ====== syntax
-" This used to be in VGdb_open, but older vims crashed on it
 highlight DebugBreak guibg=darkred guifg=white ctermbg=darkred ctermfg=white
 " highlight DebugStop guibg=lightgreen guifg=white ctermbg=lightgreen ctermfg=white
 sign define breakpoint linehl=DebugBreak
@@ -56,6 +56,7 @@ sign define current linehl=Search text=>> texthl=Search
 hi def link vgdbKey Statement
 hi def link vgdbGoto Type
 hi def link vgdbFrame LineNr
+hi def link vgdbCmd Macro
 
 "===== toolkit {{{
 let s:match = []
@@ -89,6 +90,11 @@ function! s:gotoGdbWin()
 		return
 	endif
 	let gdbwin = bufwinnr(s:vgdb_bufname)
+	if gdbwin == -1
+		" if multi-tab or the buffer is hidden
+		call s:VGdb_openWindow()
+		let gdbwin = bufwinnr(s:vgdb_bufname)
+	endif
 	exec gdbwin . "wincmd w"
 endf
 
@@ -101,12 +107,7 @@ endf
 "}}}
 
 " Get ready for communication
-function! VGdb_open()
-	" save current setting and restore when vgdb quits via 'so .exrc'
-	mk!
-	set nocursorline
-	set nocursorcolumn
-
+function! s:VGdb_openWindow()
     let bufnum = bufnr(s:vgdb_bufname)
 
     if bufnum == -1
@@ -119,6 +120,16 @@ function! VGdb_open()
 
     " Create the tag explorer window
     exe 'silent!  botright ' . s:vgdb_winheight . 'split ' . wcmd
+endfunction
+
+" NOTE: this function will be called by vgdb script.
+function! VGdb_open()
+	" save current setting and restore when vgdb quits via 'so .exrc'
+	mk!
+	set nocursorline
+	set nocursorcolumn
+
+	call s:VGdb_openWindow()
 
     " Mark the buffer as a scratch buffer
     setlocal buftype=nofile
@@ -130,6 +141,11 @@ function! VGdb_open()
 	setlocal winfixheight
 	setlocal cursorline
 
+	setlocal foldcolumn=2
+	setlocal foldtext=VGdb_foldTextExpr()
+	setlocal foldmarker={,}
+	setlocal foldmethod=marker
+
     augroup VGdbAutoCommand
 "	autocmd WinEnter <buffer> if line(".")==line("$") | starti | endif
 	autocmd WinLeave <buffer> stopi
@@ -137,8 +153,8 @@ function! VGdb_open()
     augroup end
 
 	call s:VGdb_shortcuts()
-	call append(0, "(gdb)")
-	starti
+	exe "normal I" . s:vgdb_prompt
+	starti!
 	
 	let s:vgdb_running = 1
 
@@ -160,7 +176,7 @@ function! s:VGdb_goto(file, line)
 	endif
 	call s:gotoTgtWin()
 	if bufnr(f) != bufnr("%")
-		if &modified 
+		if &modified || bufname("%") == s:vgdb_bufname
 			execute 'new '.f
 		else
 			execute 'e '.f
@@ -364,6 +380,16 @@ function! VGdb(cmd, ...)  " [mode]
 
 	let curwin = winnr()
 	let stayInTgtWin = 0
+	if usercmd =~ '^\s*(gdb)' 
+		let usercmd = substitute(usercmd, '^\s*(gdb)\s*', '', '')
+	elseif mode == 'i'
+		if line('.') != line('$')
+			call append('$', s:vgdb_prompt . usercmd)
+			$
+		else
+			exe "normal I" . s:vgdb_prompt
+		endif
+	endif
 	if s:mymatch(usercmd, '\v#(\d+)') && s:debugging
 		let usercmd = "@frame " . s:match[1]
 		let stayInTgtWin = 1
@@ -399,6 +425,8 @@ function! VGdb(cmd, ...)  " [mode]
 		endif
 		if !hideline
 			call s:gotoGdbWin()
+			" bugfix: '{0x123}' is wrong treated when foldmethod=marker 
+			let line = substitute(line, '{\ze\S', '{ ', 'g')
 			call append(line("$"), line)
 			$
 			redraw
@@ -408,8 +436,11 @@ function! VGdb(cmd, ...)  " [mode]
 
 	if mode == 'i' && !stayInTgtWin
 		call s:gotoGdbWin()
-		normal Go
-		starti
+		if getline('$') != s:vgdb_prompt
+			call append('$', s:vgdb_prompt)
+		endif
+		$
+		starti!
 	endif
 
 	if stayInTgtWin
@@ -460,13 +491,14 @@ function! s:VGdb_shortcuts()
 	syn keyword vgdbKey Function Breakpoint Num Type Disp Enb Address What
 	syn match vgdbFrame /\v^#\d+/
 	syn match vgdbGoto /\v^.* (at .+:\d+|file .+, line \d+).*$/
+	syn match vgdbCmd /^(gdb).*/
 
 	" shortcut in VGDB window
     inoremap <buffer> <silent> <CR> <c-o>:call VGdb(getline('.'), 'i')<cr>
     nnoremap <buffer> <silent> <CR> :call VGdb(getline('.'), 'n')<cr>
 	nnoremap <buffer> <silent> <2-LeftMouse> :call VGdb(getline('.'), 'n')<cr>
 	inoremap <buffer> <silent> <2-LeftMouse> <c-o>:call VGdb(getline('.'), 'n')<cr>
-	inoremap <buffer> <silent> <TAB> <C-P>
+	inoremap <buffer> <silent> <TAB> <C-X><C-L>
 	"nnoremap <buffer> <silent> : <C-W>p:
 
 	nmap <silent> <F9>	 :call VGdb_toggle()<CR>
@@ -474,8 +506,11 @@ function! s:VGdb_shortcuts()
 	nmap <silent> <C-S-F10>		 :call VGdb_jump()<CR>
 	nmap <silent> <C-F10> :call VGdb_runToCursur()<CR>
 "	nmap <silent> <F6>   :call VGdb("run")<CR>
-	nmap <silent> <C-P>	 :VGdb p <C-R><C-W><CR>
-	vmap <silent> <C-P>	 y:VGdb p <C-R>0<CR>
+	nmap <silent> <C-P>	 :VGdb .p <C-R><C-W><CR>
+	vmap <silent> <C-P>	 y:VGdb .p <C-R>0<CR>
+	nmap <silent> <Leader>pr	 :VGdb p <C-R><C-W><CR>
+	vmap <silent> <Leader>pr	 y:VGdb p <C-R>0<CR>
+	nmap <silent> <Leader>bt	 :VGdb bt<CR>
 
 	map <silent> <F5>    :VGdb c<cr>
 	map <silent> <S-F5>  :VGdb k<cr>
@@ -492,14 +527,15 @@ function! s:VGdb_shortcuts()
 	amenu VGdb.Stop\ debugging\ (Kill)<tab>Shift-F5	:VGdb k<CR>
 	amenu VGdb.-sep1- :
 
-	amenu VGdb.Show\ callstack					:call VGdb("where")<CR>
+	amenu VGdb.Show\ callstack<tab>\\bt				:call VGdb("where")<CR>
 	amenu VGdb.Set\ next\ statement\ (Jump)<tab>Ctrl-Shift-F10\ or\ \\ju 	:call VGdb_jump()<CR>
 	amenu VGdb.Top\ frame 						:call VGdb("#0")<CR>
 	amenu VGdb.Callstack\ up 					:call VGdb("up")<CR>
 	amenu VGdb.Callstack\ down 					:call VGdb("down")<CR>
 	amenu VGdb.-sep2- :
 
-	amenu VGdb.Print\ variable<tab>Ctrl-P		:VGdb print <C-R><C-W><CR> 
+	amenu VGdb.Preview\ variable<tab>Ctrl-P		:VGdb .p <C-R><C-W><CR> 
+	amenu VGdb.Print\ variable<tab>\\pr			:VGdb p <C-R><C-W><CR> 
 	amenu VGdb.Show\ breakpoints 				:VGdb info breakpoints<CR>
 	amenu VGdb.Show\ locals 					:VGdb info locals<CR>
 	amenu VGdb.Show\ args 						:VGdb info args<CR>
@@ -513,12 +549,16 @@ function! s:VGdb_shortcuts()
 endf
 
 function! VGdb_balloonExpr()
-	return VGdb_call('p '.v:beval_text)
+	return VGdb_call('.p '.v:beval_text)
 " 	return 'Cursor is at line ' . v:beval_lnum .
 " 		\', column ' . v:beval_col .
 " 		\ ' of file ' .  bufname(v:beval_bufnr) .
 " 		\ ' on word "' . v:beval_text . '"'
 endf
+
+function! VGdb_foldTextExpr()
+	return getline(v:foldstart) . ' ' . substitute(getline(v:foldstart+1), '\v^\s+', '', '') . ' ... (' . (v:foldend-v:foldstart-1) . ' lines)'
+endfunction
 
 command -nargs=* -complete=file VGdb :call VGdb(<q-args>)
 ca gdb VGdb

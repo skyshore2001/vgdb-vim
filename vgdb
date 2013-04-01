@@ -337,6 +337,23 @@ sub execCmd # ($comm, $cmd, [$hideout=0])
 	return;
 }
 
+sub execVgdbCmd # ($comm, $cmd, [$hideout=0])
+{
+	my ($comm, $cmd, $hideout) = @_;
+	my $rv = 1;
+	msg "(vgdb) '$cmd'\n";
+	if ($cmd =~ /^debug=(.+)$/) {
+		$ENV{VGDB_DEBUG} = $1;
+	}
+	elsif ($cmd =~ /^p\s+(.+)$/) {
+		$rv = execPreviewCmd($comm, $1, $hideout);
+	}
+	else {
+		msg "!!! unknown vgdb command: '$cmd'\n", 1;
+	}
+	return $rv;
+}
+
 =example:
 1. define in autoexp.dat:
 SBOString= <m_strData->m_str>, len=<m_strData->m_len>
@@ -414,10 +431,17 @@ sub execPreviewCmd # ($comm, $expr, $hideout)
 		}
 		$type = $1;
 		$comm->put("($type) ");
-		my $mainType = $type;
+		my $mainType;
 		while ($type =~ /\w+/g) {
 			if ($& ne 'const') {
-				$mainType = $&;
+				unless (defined $mainType) {
+					$mainType = $&;
+				}
+				else
+				{
+					$mainType = $type;
+					last;
+				}
 			}
 		}
 		$isptr =1 if $type =~ /\*/;
@@ -443,7 +467,7 @@ sub execPreviewCmd # ($comm, $expr, $hideout)
 			# set expandExpr="($expr)->m_strData->m_str"
 			$expandExpr =~ s/(?<![.>])\b(?=[a-zA-Z_])/($expr)->/g;
 			local $_ = getCmdResult($commMem, "p $expandExpr");
-			s/^.+= (0x\S+ )?//;
+			s/^.+? = (0x\S+ )?//;
 			s/\n//;
 			$_;
 		};
@@ -469,8 +493,9 @@ if($msg_task == 0)
 	if ($IS_MSWIN) {
     execCmd(undef, 'set new-console on');
 	}
-    execCmd(undef, 'set print pretty on');
-    execCmd(undef, 'set breakpoint pending on');
+	execCmd(undef, 'set print pretty on');
+	execCmd(undef, 'set breakpoint pending on');
+	execCmd(undef, 'set pagination off');
 
 	my $comm = CommInet->new();
 	msg "[$$] msg task start listening at $VGDB_PORT\n";
@@ -480,14 +505,20 @@ if($msg_task == 0)
 		my $cmds = $comm->get() || '';
 		my $hideout = $cmds =~ s/^@//;
 		mychop($cmds);
-		$cmds = ' ' if $cmds eq '';
-		for (split /;/, $cmds) {
+		my @cmdlist;
+		if ($cmds eq '' || index($cmds, '"') >= 0) {
+			push @cmdlist, $cmds;
+		}
+		else {
+			@cmdlist = split /;/, $cmds;
+		}
+		for (@cmdlist) {
 			s/^\s+//;
 			s/\s+$//;
 
 			my $rv;
-			if (/^p\s+(.+)$/) {
-				$rv = execPreviewCmd($comm, $1, $hideout);
+			if (/^\.(.+)$/) { # begin with "."
+				$rv = execVgdbCmd($comm, $1, $hideout);
 			}
 			else {
 				$rv = execCmd($comm, $_, $hideout);

@@ -72,12 +72,16 @@ You can directly type "gdb" in vi command line as it's set to be the abbreviatio
 A flash demo (__VGDB_DEMO__.htm) in my package helps you quickly go through the
 vgdb features. Here are how you can use vgdb:
 
-1) Type gdb command in the __VGDB__ window. Some commands are special treated: >
+1) Type gdb command in the __VGDB__ window. Some gdb commands are special treated: >
 
 	c - run or continue
-	p {var} - preview var (not only print)
 	q - quit gdb and vgdb window
 	#0 - equal to "frame 0", and also for #1, #2, ...
+
+vgdb commands (starts with '.'): >
+
+	.p {var} - preview var (according to autoexp.dat); shortcut <C-P>
+	.debug={0|1} - disable|enable to show debug info in vgdb
 
 2) Press Enter or double click in the __VGDB__ window to jump into the code position.
 
