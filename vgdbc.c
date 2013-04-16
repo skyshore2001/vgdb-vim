@@ -44,17 +44,66 @@ Limitation:
 
 #define ERR_RET(eno, estr) do {sprintf(RETBUF, "VGdbc Error [%d]: %s", eno, estr); return RETBUF;} while (0)
 
-static char RETBUF[4000];
+void *g_hModule;
+
+static int BUFLEN = 4000;
+static char *RETBUF;
+
+#ifdef _WINDOWS
+#define INIT 
+
+BOOL APIENTRY DllMain( HMODULE hModule,
+                       DWORD  ul_reason_for_call,
+                       LPVOID lpReserved
+					 )
+{
+	switch (ul_reason_for_call)
+	{
+	case DLL_PROCESS_ATTACH:
+	case DLL_THREAD_ATTACH:
+	case DLL_THREAD_DETACH:
+	case DLL_PROCESS_DETACH:
+		break;
+	}
+	return TRUE;
+}
+
+#else // _LINUX
+
+#define INIT VGdbc_Init
+
+// #define _GNU_SOURCE
+#define __USE_GNU
+#include <dlfcn.h>
+
+// the attribte does not work if using dlopen
+void __attribute__((constructor)) VGdbc_Init()
+{
+	if (RETBUF == NULL)
+	{
+		Dl_info di;
+		if (dladdr(VGdbc_Init, &di)) {
+			g_hModule = dlopen(di.dli_fname, RTLD_LAZY);
+		}
+		RETBUF = (char*)malloc(BUFLEN);
+	}
+}
+#endif // _WINDOWS
 
 const char *test(const char *cmd)
 {
+	INIT();
+	static char lastcmd[100];
 	char *portstr = getenv("VGDB_PORT");
-	sprintf(RETBUF, "%s OK. $VGDB_PORT=%s", cmd, portstr);
+	sprintf(RETBUF, "%s OK. $VGDB_PORT=%s. last test='%s'", cmd, portstr, lastcmd);
+	strncpy(lastcmd, cmd, 100);
 	return RETBUF;
 }
 
 const char *tcpcall(const char *cmd)
 {
+	INIT();
+
 	int VGDB_PORT = 30899;
 	SOCKET SOCK;
 
@@ -109,14 +158,24 @@ const char *tcpcall(const char *cmd)
 
 	int cnt = 0;
 	char *p = RETBUF;
-	int len = sizeof(RETBUF);
 	int totalcnt = 0;
 	while (1) {
-		cnt=recv(SOCK, p, len-totalcnt-1, 0);
+		cnt=recv(SOCK, p, BUFLEN-totalcnt-1, 0);
 		if (cnt <= 0)
 			break;
 		p += cnt;
 		totalcnt += cnt;
+		if (BUFLEN <= totalcnt+1) {
+			char *tmpbuf = realloc(RETBUF, BUFLEN <<1);
+			if (tmpbuf == NULL) {
+				while (recv(SOCK, RETBUF-100, 100, 0) > 0); // clear the send buf of the server.
+				strcpy(RETBUF-100, " ... (too long)\n");
+				break;
+			}
+			RETBUF = tmpbuf;
+			p = RETBUF +BUFLEN-1;
+			BUFLEN <<=1;
+		}
 	}
 	if (totalcnt > 0)
 		RETBUF[totalcnt] = 0;

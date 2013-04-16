@@ -32,6 +32,7 @@ else # for linux:
 
 CFLAGS=-g -fPIC -D_LINUX
 CXXFLAGS=$(CFLAGS)
+LDFLAGS=-ldl
 
 all: libvgdbc.so vgdbc_test cpp1
 
@@ -41,11 +42,11 @@ test: all
 test2: vgdbc_test
 	@$< "help"
 
-vgdbc_test: vgdbc.o -lvgdbc
+vgdbc_test: vgdbc.o
 	$(CC) $^ -o $@ $(LDFLAGS) 
 
 libvgdbc.so: vgdbc.o
-	$(CC) -shared $^ -o $@ $(LDFLAGS) 
+	$(CC) -shared $^ -o $@ $(LDFLAGS)
 
 clean:
 	-rm -rf *.o libvgdbc.so vgdbc_test

@@ -72,14 +72,10 @@ You can directly type "gdb" in vi command line as it's set to be the abbreviatio
 A flash demo (__VGDB_DEMO__.htm) in my package helps you quickly go through the
 vgdb features. Here are how you can use vgdb:
 
-1) Type gdb command in the __VGDB__ window. Some gdb commands are special treated: >
+1) Type gdb command in the __VGDB__ window. Some commands starting with '.'
+are known as "vgdb" commands: >
 
-	c - run or continue
-	q - quit gdb and vgdb window
-	#0 - equal to "frame 0", and also for #1, #2, ...
-
-vgdb commands (starts with '.'): >
-
+	.c - run or continue
 	.p {var} - preview var (according to autoexp.dat); shortcut <C-P>
 	.debug={0|1} - disable|enable to show debug info in vgdb
 
@@ -87,7 +83,7 @@ vgdb commands (starts with '.'): >
 
 Jump to breakpoint: >
   	i break (or info breakpoints)
-show all breakpoints info and can enter on these lines.
+show all breakpoints info and then you can press enter on these lines.
 
 Jump to a frame of the call stack: >
 	bt (or where)
@@ -100,7 +96,7 @@ double click or press <cr> on the #xx line, it directly goto the frame.
 
 The following shortcuts is applied that is similar to MSVC: 
 
-	<F5> 	- run or continue
+	<F5> 	- run or continue (.c)
 	<S-F5> 	- stop debugging (kill)
 	<F10> 	- next
 	<F11> 	- step into
@@ -108,7 +104,7 @@ The following shortcuts is applied that is similar to MSVC:
 	<C-F10>	- run to cursor (tb and c)
 	<F9> 	- toggle breakpoint on current line
 	\ju or <C-S-F10> - set next statement (tb and jump)
-	<C-P> 	- view variable under the cursor
+	<C-P> 	- view variable under the cursor (.p)
 
 Note:
 If you use vgdb in the vim in a gnome terminal, the <F11> may be conflict with the 

@@ -260,6 +260,11 @@ endf
 
 let s:last_id = 0
 function! s:VGdb_cb_setpos(file, line)
+	if a:line <= 0
+		let s:debugging = 1
+		return
+	endif
+
 	let s:nameMap[s:basename(a:file)] = a:file
 	call s:VGdb_goto(a:file, a:line)
 	let s:debugging = 1
@@ -402,8 +407,6 @@ function! VGdb(cmd, ...)  " [mode]
 		return
 	elseif mode == 'n'  " mode n: jump to source or current callstack, dont exec other gdb commands
 		return
-	elseif usercmd == "c" && s:debugging == 0
-		let usercmd = "r"
 	endif
 
 	call s:gotoGdbWin()
@@ -512,7 +515,7 @@ function! s:VGdb_shortcuts()
 	vmap <silent> <Leader>pr	 y:VGdb p <C-R>0<CR>
 	nmap <silent> <Leader>bt	 :VGdb bt<CR>
 
-	map <silent> <F5>    :VGdb c<cr>
+	map <silent> <F5>    :VGdb .c<cr>
 	map <silent> <S-F5>  :VGdb k<cr>
 	map <silent> <F10>   :VGdb n<cr>
 	map <silent> <F11>   :VGdb s<cr>

@@ -259,6 +259,7 @@ unless(defined($msg_task = fork()))
 	die("Unable to fork");
 }
 
+my $is_debugging = 0;
 sub parseGdbLine  # ($comm, $line, $hideout)
 {
 	my $comm = $_[0];
@@ -291,8 +292,13 @@ sub parseGdbLine  # ($comm, $line, $hideout)
 	# '[Inferior 1 (process 11468) exited normally]'
 	# 'Kill the program being debugged? (y or n) [answered Y; input not from terminal]'
 	# 'The program is not being run.'
-	elsif (/Inferior/ || /^Kill the program/ || /^Program exited/ || /^The program is not being run/) {
+	elsif (/Inferior/ || /^Kill the program/ || /^Program exited/ || /^The program is not being run/ || /^The program no longer exists/ || /^Detaching from/) {
+		$is_debugging = 0;
 		$cmd = "delpos()";
+	}
+	elsif (/^Attaching to/) {
+		$is_debugging = 1;
+		$cmd = "setpos(\"\", 0)";
 	}
 	# cd bin
 	# Working directory c:\prog\myprog\bin.
@@ -307,6 +313,7 @@ sub parseGdbLine  # ($comm, $line, $hideout)
 		$f =~ s/\\/\//g;
 		$cmd = "setpos(\"$f\", $ln)";
 		$hideout =1;
+		$is_debugging = 1;
 	}
 	$comm->put("$_\n") unless $hideout;
 	if (defined $cmd) {
@@ -342,7 +349,10 @@ sub execVgdbCmd # ($comm, $cmd, [$hideout=0])
 	my ($comm, $cmd, $hideout) = @_;
 	my $rv = 1;
 	msg "(vgdb) '$cmd'\n";
-	if ($cmd =~ /^debug=(.+)$/) {
+	if ($cmd eq 'c') {
+		$rv = execCmd($comm, $is_debugging? 'c': 'r', $hideout);
+	}
+	elsif ($cmd =~ /^debug=(.+)$/) {
 		$ENV{VGDB_DEBUG} = $1;
 	}
 	elsif ($cmd =~ /^p\s+(.+)$/) {
