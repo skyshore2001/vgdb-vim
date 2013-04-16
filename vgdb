@@ -17,6 +17,9 @@ use strict;
 use warnings;
 
 ###### config {{{
+my $VER = '1.0';
+my $VERINFO = "vgdb version $VER.\n";
+
 my $IS_MSWIN = $^O eq 'MSWin32';
 
 my $TTY;
@@ -352,6 +355,9 @@ sub execVgdbCmd # ($comm, $cmd, [$hideout=0])
 	if ($cmd eq 'c') {
 		$rv = execCmd($comm, $is_debugging? 'c': 'r', $hideout);
 	}
+	elsif ($cmd eq 'ver' || $cmd eq 'version') {
+		$comm->put($VERINFO);
+	}
 	elsif ($cmd =~ /^debug=(.+)$/) {
 		$ENV{VGDB_DEBUG} = $1;
 	}
@@ -498,6 +504,7 @@ sub execPreviewCmd # ($comm, $expr, $hideout)
 select(VIM_WR);    $| = 1; # make unbuffered
 if($msg_task == 0)
 {
+	msg $VERINFO, 1;
 	msg "[$$] msg task\n";
 	execCmd(undef, 'set prompt (gdb)\n');
 	if ($IS_MSWIN) {
