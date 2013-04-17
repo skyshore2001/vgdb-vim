@@ -1,4 +1,4 @@
-CC=gcc
+CC=g++
 CXX=g++
 
 ifdef windir

@@ -21,6 +21,8 @@ then run it in VIM:
  #include <sys/socket.h>
  #include <sys/ioctl.h>
  #include <arpa/inet.h>
+ //#define __USE_GNU
+ #include <dlfcn.h>
 
  typedef struct sockaddr_in SOCKADDR_IN;
  typedef struct sockaddr SOCKADDR;
@@ -49,50 +51,37 @@ void *g_hModule;
 static int BUFLEN = 4000;
 static char *RETBUF;
 
-#ifdef _WINDOWS
-#define INIT 
-
-BOOL APIENTRY DllMain( HMODULE hModule,
-                       DWORD  ul_reason_for_call,
-                       LPVOID lpReserved
-					 )
+struct InitLib 
 {
-	switch (ul_reason_for_call)
-	{
-	case DLL_PROCESS_ATTACH:
-	case DLL_THREAD_ATTACH:
-	case DLL_THREAD_DETACH:
-	case DLL_PROCESS_DETACH:
-		break;
-	}
-	return TRUE;
-}
+	InitLib();
+	~InitLib();
+} g_initobj;
 
-#else // _LINUX
-
-#define INIT VGdbc_Init
-
-// #define _GNU_SOURCE
-#define __USE_GNU
-#include <dlfcn.h>
-
-// the attribte does not work if using dlopen
-void __attribute__((constructor)) VGdbc_Init()
+InitLib::InitLib() 
 {
 	if (RETBUF == NULL)
 	{
+#ifdef _WINDOWS
+		g_hModule = LoadLibrary("vgdbc.dll");
+#else // _LINUX
 		Dl_info di;
-		if (dladdr(VGdbc_Init, &di)) {
+		if (dladdr(RETBUF, &di)) {
 			g_hModule = dlopen(di.dli_fname, RTLD_LAZY);
 		}
+#endif
 		RETBUF = (char*)malloc(BUFLEN);
 	}
 }
-#endif // _WINDOWS
+
+InitLib::~InitLib() 
+{
+	free(RETBUF);
+}
+
+extern "C" {
 
 const char *test(const char *cmd)
 {
-	INIT();
 	static char lastcmd[100];
 	char *portstr = getenv("VGDB_PORT");
 	sprintf(RETBUF, "%s OK. $VGDB_PORT=%s. last test='%s'", cmd, portstr, lastcmd);
@@ -102,8 +91,6 @@ const char *test(const char *cmd)
 
 const char *tcpcall(const char *cmd)
 {
-	INIT();
-
 	int VGDB_PORT = 30899;
 	SOCKET SOCK;
 
@@ -166,7 +153,7 @@ const char *tcpcall(const char *cmd)
 		p += cnt;
 		totalcnt += cnt;
 		if (BUFLEN <= totalcnt+1) {
-			char *tmpbuf = realloc(RETBUF, BUFLEN <<1);
+			char *tmpbuf = (char*)realloc(RETBUF, BUFLEN <<1);
 			if (tmpbuf == NULL) {
 				while (recv(SOCK, RETBUF-100, 100, 0) > 0); // clear the send buf of the server.
 				strcpy(RETBUF-100, " ... (too long)\n");
@@ -184,6 +171,8 @@ const char *tcpcall(const char *cmd)
 	return RETBUF;
 }
 
+} // extern "C"
+
 int main(int argc, char *argv[])
 {
 	if (argc <= 1) {
@@ -194,3 +183,4 @@ int main(int argc, char *argv[])
 	printf("%s\n", ret);
 	return 0;
 }
+
