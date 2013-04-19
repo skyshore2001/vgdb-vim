@@ -164,7 +164,7 @@ const char *tcpcall(const char *cmd)
 			BUFLEN <<=1;
 		}
 	}
-	if (totalcnt > 0)
+	if (totalcnt >= 0)
 		RETBUF[totalcnt] = 0;
 	closesocket(SOCK);
 	WSACleanup();

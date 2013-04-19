@@ -54,7 +54,8 @@ sign define current linehl=Search text=>> texthl=Search
 
 " highlight vgdbGoto guifg=Blue
 hi def link vgdbKey Statement
-hi def link vgdbGoto Type
+hi def link vgdbGoto Underlined
+hi def link vgdbPtr Underlined
 hi def link vgdbFrame LineNr
 hi def link vgdbCmd Macro
 
@@ -398,6 +399,7 @@ function! VGdb(cmd, ...)  " [mode]
 	if s:mymatch(usercmd, '\v#(\d+)') && s:debugging
 		let usercmd = "@frame " . s:match[1]
 		let stayInTgtWin = 1
+		let mode = 'n'
 
 	" Breakpoint 1, TmScrParser::Parse (this=0x7fffffffbbb0) at ../../BuildBuilder/CreatorDll/TmScrParser.cpp:64
 	" Breakpoint 14 at 0x7ffff7bbeec1: file ../../BuildBuilder/CreatorDll/RDLL_SboP.cpp, line 111.
@@ -406,6 +408,7 @@ function! VGdb(cmd, ...)  " [mode]
 		call s:VGdb_goto(s:match[1], s:match[2])
 		return
 	elseif mode == 'n'  " mode n: jump to source or current callstack, dont exec other gdb commands
+		call VGdb_expandPointerExpr()
 		return
 	endif
 
@@ -492,15 +495,20 @@ function! s:VGdb_shortcuts()
 
 	" syntax
 	syn keyword vgdbKey Function Breakpoint Num Type Disp Enb Address What
-	syn match vgdbFrame /\v^#\d+/
-	syn match vgdbGoto /\v^.* (at .+:\d+|file .+, line \d+).*$/
+	syn match vgdbFrame /\v^#\d+ .*/
+	syn match vgdbGoto /\vat .+:\d+|file .+, line \d+/
 	syn match vgdbCmd /^(gdb).*/
+	syn match vgdbPtr /\v(\w|[$])+ \=.{-0,} 0x\w+/
 
 	" shortcut in VGDB window
     inoremap <buffer> <silent> <CR> <c-o>:call VGdb(getline('.'), 'i')<cr>
+	imap <buffer> <silent> <2-LeftMouse> <cr>
+	imap <buffer> <silent> <kEnter> <cr>
+
     nnoremap <buffer> <silent> <CR> :call VGdb(getline('.'), 'n')<cr>
-	nnoremap <buffer> <silent> <2-LeftMouse> :call VGdb(getline('.'), 'n')<cr>
-	inoremap <buffer> <silent> <2-LeftMouse> <c-o>:call VGdb(getline('.'), 'n')<cr>
+	nmap <buffer> <silent> <2-LeftMouse> <cr>
+	nmap <buffer> <silent> <kEnter> <cr>
+
 	inoremap <buffer> <silent> <TAB> <C-X><C-L>
 	"nnoremap <buffer> <silent> : <C-W>p:
 
@@ -562,6 +570,51 @@ endf
 function! VGdb_foldTextExpr()
 	return getline(v:foldstart) . ' ' . substitute(getline(v:foldstart+1), '\v^\s+', '', '') . ' ... (' . (v:foldend-v:foldstart-1) . ' lines)'
 endfunction
+
+" if the value is a pointer ( var = 0x...), expand it by "VGdb .p *var"
+" e.g. $11 = (CDBMEnv *) 0x387f6d0
+" e.g.  
+" (CDBMEnv) $22 = {
+"  m_pTempTables = 0x37c6830,
+"  ...
+" }
+function! VGdb_expandPointerExpr()
+	if ! s:mymatch(getline('.'), '\v((\$|\w)+) \=.{-0,} 0x')
+		return 0
+	endif
+	let cmd = s:match[1]
+	let lastln = line('.')
+	while 1
+		normal [z
+		if line('.') == lastln
+			break
+		endif
+		let lastln = line('.')
+
+		if ! s:mymatch(getline('.'), '\v(([<>$]|\w)+) \=')
+			return 0
+		endif
+		" '<...>' means the base class. Just ignore it. Example:
+" (OBserverDBMCInterface) $4 = {
+"   <__DBMC_ObserverA> = {
+"     members of __DBMC_ObserverA:
+"     m_pEnv = 0x378de60
+"   }, <No data fields>}
+
+		if s:match[1][0:0] != '<' 
+			let cmd = s:match[1] . '.' . cmd
+		endif
+	endwhile 
+"	call append('$', cmd)
+	exec "VGdb .p *" . cmd
+	if foldlevel('.') > 0
+		" goto beginning of the fold and close it
+		normal [zzc
+		" ensure all folds for this var are closed
+		foldclose!
+	endif
+	return 1
+endf
 
 command -nargs=* -complete=file VGdb :call VGdb(<q-args>)
 ca gdb VGdb

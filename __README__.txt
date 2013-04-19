@@ -76,21 +76,40 @@ vgdb features. Here are how you can use vgdb:
 are known as "vgdb" commands: >
 
 	.c - run or continue
+	q  - quit gdb and vgdb
 	.p {var} - preview var (according to autoexp.dat); shortcut <C-P>
 	.debug={0|1} - disable|enable to show debug info in vgdb
+	.ver  - show vgdb version info
 
-2) Press Enter or double click in the __VGDB__ window to jump into the code position.
+2) Press Enter or double click in the __VGDB__ window (vim normal mode).
 
-Jump to breakpoint: >
-  	i break (or info breakpoints)
-show all breakpoints info and then you can press enter on these lines.
+2.1) Jump to a code point or breakpoint: 
+if a line contains file/lineno like >
+	AddMoney (money=0x7fffffffde20, d=1.1399999999999999) at cpp1.cpp:24
+OR >
+	breakpoint 2 at 0x4009ad: file cpp1.cpp, line 77.
+you can press enter on these lines to go there. Such lines are often
+highlighted.
 
-Jump to a frame of the call stack: >
+2.2) Jump to a frame of the call stack:
+show all frames: >
 	bt (or where)
 it shows frames like this >
 	#0 ...
 	#1 ...
 double click or press <cr> on the #xx line, it directly goto the frame.
+
+2.3) Derefernece a pointer
+A pointer variable is only shown like this: >
+	$1 = (SBOString *) 0x7fffffffde10
+press enter on this line will get the content just like you run >
+	.p *$1
+
+So do struct/class members of pointer type: >
+	$2 = {
+	  m_strData = 0x603010
+	}
+press enter on the line of "m_strData" to show this member instead of pointer.
 
 3) Shortcuts
 

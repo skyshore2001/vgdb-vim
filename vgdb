@@ -17,7 +17,7 @@ use strict;
 use warnings;
 
 ###### config {{{
-my $VER = '1.0';
+my $VER = '1.1';
 my $VERINFO = "vgdb version $VER.\n";
 
 my $IS_MSWIN = $^O eq 'MSWin32';
