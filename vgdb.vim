@@ -498,7 +498,7 @@ function! s:VGdb_shortcuts()
 	syn match vgdbFrame /\v^#\d+ .*/
 	syn match vgdbGoto /\vat .+:\d+|file .+, line \d+/
 	syn match vgdbCmd /^(gdb).*/
-	syn match vgdbPtr /\v(\w|[$])+ \=.{-0,} 0x\w+/
+	syn match vgdbPtr /\v(^|\s+)\zs\$?\w+ \=.{-0,} 0x\w+/
 
 	" shortcut in VGDB window
     inoremap <buffer> <silent> <CR> <c-o>:call VGdb(getline('.'), 'i')<cr>
