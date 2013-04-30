@@ -299,7 +299,8 @@ sub parseGdbLine  # ($comm, $line, $hideout)
 		$is_debugging = 0;
 		$cmd = "delpos()";
 	}
-	elsif (/^Attaching to/) {
+	# 'Starting program: /mnt/data/depot2/BUSMB_B1/B1OD/20_DEV/c/9.01/sbo/Source/LinuxProjects/bin-x64/mytest'
+	elsif (/^Starting program/ || /^Attaching to/) {
 		$is_debugging = 1;
 		$cmd = "setpos(\"\", 0)";
 	}
@@ -347,16 +348,64 @@ sub execCmd # ($comm, $cmd, [$hideout=0])
 	return;
 }
 
+# feature: 1. auto tbreak; 2. allow jump cross-function (MUST set frame to the target function before)
+sub execJumpCmd # ($comm, $cmd, [$hideout=0])
+{
+	my ($comm, $cmd, $hideout) = @_;
+	my @a = split(/\s+/, $cmd, 2);
+	my $arg = $a[1];
+
+	# backup and restore stack if not at top frame (often user switch to other frame and jump in that frame)
+	my $commMem = CommMem->new();
+	local $_ = getCmdResult($commMem, 'frame');
+	my $restoreStack = !/^#0\s/;
+	my $isX86;
+
+	if ($restoreStack) {
+		$_ = getCmdResult($commMem, 'whatis $rbp');
+		$isX86 = ($_ =~ /type = void$/);  # on x64, it shows "type = void *"
+
+		# backup stack
+		if ($isX86) {
+			execCmd(undef, 'set $ebp1=$ebp');
+			execCmd(undef, 'set $esp1=$esp');
+		}
+		else { # x64
+			execCmd(undef, 'set $rbp1=$rbp');
+			execCmd(undef, 'set $rsp1=$rsp');
+		}
+	}
+
+	execCmd(undef, 'tbreak ' . $arg);
+	execCmd($comm, 'jump ' . $arg, $hideout);
+
+	if ($restoreStack) { 
+		# e.g. "Line 78 is not in `AddMoney(MONEY*, double)'.  Jump anyway? (y or n)"
+		# restore stack
+		if ($isX86) {
+			execCmd(undef, 'set $ebp=$ebp1');
+			execCmd(undef, 'set $esp=$esp1');
+		}
+		else { # x64
+			execCmd(undef, 'set $rbp=$rbp1');
+			execCmd(undef, 'set $rsp=$rsp1');
+		}
+	}
+}
+
 sub execVgdbCmd # ($comm, $cmd, [$hideout=0])
 {
 	my ($comm, $cmd, $hideout) = @_;
 	my $rv = 1;
 	msg "(vgdb) '$cmd'\n";
 	if ($cmd eq 'c') {
-		$rv = execCmd($comm, $is_debugging? 'c': 'r', $hideout);
+		$rv = execCmd($comm, $is_debugging? 'continue': 'run', $hideout);
 	}
 	elsif ($cmd eq 'ver' || $cmd eq 'version') {
 		$comm->put($VERINFO);
+	}
+	elsif ($cmd =~ /^ju(mp)?\s/) {
+		$rv = execJumpCmd($comm, $cmd, $hideout);
 	}
 	elsif ($cmd =~ /^debug=(.+)$/) {
 		$ENV{VGDB_DEBUG} = $1;
@@ -365,6 +414,7 @@ sub execVgdbCmd # ($comm, $cmd, [$hideout=0])
 		$rv = execPreviewCmd($comm, $1, $hideout);
 	}
 	else {
+		$comm->put("!!! unknown vgdb command: '$cmd'\n");
 		msg "!!! unknown vgdb command: '$cmd'\n", 1;
 	}
 	return $rv;
@@ -520,7 +570,6 @@ if($msg_task == 0)
 	while(! $gdbQuit)
 	{
 		my $cmds = $comm->get() || '';
-		my $hideout = $cmds =~ s/^@//;
 		mychop($cmds);
 		my @cmdlist;
 		if ($cmds eq '' || index($cmds, '"') >= 0) {
@@ -533,6 +582,7 @@ if($msg_task == 0)
 			s/^\s+//;
 			s/\s+$//;
 
+			my $hideout = s/^@//;
 			my $rv;
 			if (/^\.(.+)$/) { # begin with "."
 				$rv = execVgdbCmd($comm, $1, $hideout);

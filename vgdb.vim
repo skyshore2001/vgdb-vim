@@ -482,20 +482,22 @@ endf
 function! VGdb_jump()
 	call s:gotoTgtWin()
 	let key = s:VGdb_curpos()
-	call VGdb("tb ".key." ; ju ".key)
+"	call VGdb("@tb ".key." ; ju ".key)
+"	call VGdb("set $rbp1=$rbp; set $rsp1=$rsp; @tb ".key." ; ju ".key . "; set $rsp=$rsp1; set $rbp=$rbp1")
+	call VGdb(".ju ".key)
 endf
 
 function! VGdb_runToCursur()
 	call s:gotoTgtWin()
 	let key = s:VGdb_curpos()
-	call VGdb("tb ".key." ; c")
+	call VGdb("@tb ".key." ; c")
 endf
 
 function! s:VGdb_shortcuts()
 
 	" syntax
 	syn keyword vgdbKey Function Breakpoint Num Type Disp Enb Address What
-	syn match vgdbFrame /\v^#\d+ .*/
+	syn match vgdbFrame /\v^#\d+ .*/ contains=vgdbGoto
 	syn match vgdbGoto /\vat .+:\d+|file .+, line \d+/
 	syn match vgdbCmd /^(gdb).*/
 	syn match vgdbPtr /\v(^|\s+)\zs\$?\w+ \=.{-0,} 0x\w+/
@@ -540,7 +542,7 @@ function! s:VGdb_shortcuts()
 
 	amenu VGdb.Show\ callstack<tab>\\bt				:call VGdb("where")<CR>
 	amenu VGdb.Set\ next\ statement\ (Jump)<tab>Ctrl-Shift-F10\ or\ \\ju 	:call VGdb_jump()<CR>
-	amenu VGdb.Top\ frame 						:call VGdb("#0")<CR>
+	amenu VGdb.Top\ frame 						:call VGdb("frame 0")<CR>
 	amenu VGdb.Callstack\ up 					:call VGdb("up")<CR>
 	amenu VGdb.Callstack\ down 					:call VGdb("down")<CR>
 	amenu VGdb.-sep2- :
