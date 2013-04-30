@@ -80,6 +80,7 @@ are known as "vgdb" commands: >
 	.p {var} - preview var (according to autoexp.dat); shortcut <C-P>
 	.debug={0|1} - disable|enable to show debug info in vgdb
 	.ver  - show vgdb version info
+	.ju {pos} - jump to position (auto tbreak and allow cross-function)
 
 2) Press Enter or double click in the __VGDB__ window (vim normal mode).
 
@@ -143,6 +144,27 @@ on the variable.
 VGdb command has the same effect as you input in the __VGDB__ window. e.g. >
 
 	:VGdb next
+
+6) Execution point jump
+
+VGdb provides simple jump by pressing "\ju" on the new position. More, it
+supports cross-function jump. Here's an example: >
+	void Fun1()
+	{
+	..	Fun2();
+		printf("OK\n");  // <- you want come there directly 
+	}
+	void Fun2()
+	{
+	=>	printf("Fun2\n"); // current execution position
+		...
+	}
+
+It is in Fun2 but you want to directly jump back to the caller Fun1() and
+continue running. You first switch the frame into Fun1, e.g. >
+	:VGdb up
+Then move the cursor to the new line and press "\ju". VGdb will fix the stack
+besides jumping.
 
 ==============================================================================
 *5* Preview variable (auto expand)			*vgdb-preview*
