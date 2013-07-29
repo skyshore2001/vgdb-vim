@@ -1,6 +1,5 @@
 """""""""""""""""""""""""""""""""""""""""""""""""""""""
 " vgdb - Vim plugin for interface to gdb from cterm
-" Last change: v1.0
 " Maintainer: Liang, Jian (skyshore@gmail.com)
 " Thanks to gdbvim and vimgdb.
 "
@@ -14,7 +13,7 @@ endif
 
 let s:ismswin=has('win32')
 
-" ====== config
+" ====== config {{{
 let loaded_vgdb = 1
 let s:vgdb_winheight = 10
 let s:vgdb_bufname = "__VGDB__"
@@ -24,9 +23,9 @@ let s:vgdb_prompt = '(gdb) '
 let s:vgdb_client = "vgdb -c" " on MSWin, actually the vgdb.bat is called in the search path
 " used by libcall style
 let s:vgdb_lib = s:ismswin ? 'vgdbc.dll' : 'libvgdbc.so'
-
-" ====== global
-let s:bplist = {} " id => {file, line} that returned by gdb
+"}}}
+" ====== global {{{
+let s:bplist = {} " id => {file, line, disabled} that returned by gdb
 
 let s:vgdb_running = 0
 let s:debugging = 0
@@ -45,10 +44,13 @@ if g:vgdb_uselibcall
 	endtry
 endif
 
-" ====== syntax
+let s:set_disabled_bp = 0
+"}}}
+" ====== syntax {{{
 highlight DebugBreak guibg=darkred guifg=white ctermbg=darkred ctermfg=white
-" highlight DebugStop guibg=lightgreen guifg=white ctermbg=lightgreen ctermfg=white
+highlight DisabledBreak guibg=lightred guifg=black ctermbg=lightred ctermfg=black
 sign define breakpoint linehl=DebugBreak
+sign define disabledbp linehl=DisabledBreak
 " sign define current linehl=DebugStop
 sign define current linehl=Search text=>> texthl=Search
 
@@ -58,8 +60,8 @@ hi def link vgdbGoto Underlined
 hi def link vgdbPtr Underlined
 hi def link vgdbFrame LineNr
 hi def link vgdbCmd Macro
-
-"===== toolkit {{{
+"}}}
+" ====== toolkit {{{
 let s:match = []
 function! s:mymatch(expr, pat)
 	let s:match = matchlist(a:expr, a:pat)
@@ -84,7 +86,6 @@ function! s:basename(file)
 	return strpart(a:file, pos+1)
 endf
 "}}}
-
 " ====== app toolkit {{{
 function! s:gotoGdbWin()
 	if bufname("%") == s:vgdb_bufname
@@ -105,8 +106,48 @@ function! s:gotoTgtWin()
 		exec "wincmd p"
 	endif
 endf
+
+function! s:VGdb_bpkey(file, line)
+	return a:file . ":" . a:line
+endf
+
+function! s:VGdb_curpos()
+	" ???? filename ????
+	let file = expand("%:t")
+	let line = line(".")
+	return s:VGdb_bpkey(file, line)
+endf
+
+function! s:placebp(id, line, bnr, disabled)
+	let name = (!a:disabled)? "breakpoint": "disabledbp"
+	execute "sign place " . a:id . " name=" . name . " line=" . a:line. " buffer=" . a:bnr
+endf
+
+function! s:unplacebp(id)
+	execute "sign unplace ". a:id
+endf
+
+function! s:setbp(file, lineno, disabled)
+	if a:file == "" || a:lineno == 0
+		let key = s:VGdb_curpos()
+	else
+		let key = s:VGdb_bpkey(a:file, a:lineno)
+	endif
+	let s:set_disabled_bp = a:disabled
+	call VGdb("break ".key)
+	let s:set_disabled_bp = 0
+	" will auto call back s:VGdb_cb_setbp
+endf
+
+function! s:delbp(id)
+	call VGdb("delete ".a:id)
+	call s:VGdb_cb_delbp(a:id)
+" 	call VGdb("clear ".key)
+endf
+
 "}}}
 
+" ====== functions {{{
 " Get ready for communication
 function! s:VGdb_openWindow()
     let bufnum = bufnr(s:vgdb_bufname)
@@ -220,6 +261,52 @@ function! s:getFixedPath(file)
 	return a:file
 endf
 
+" breakpoint highlight line may move after you edit the file. 
+" this function re-set such BPs (except disables ones) that don't match the actual line.
+function! s:refreshBP()
+	" get sign list
+	lan message C
+	redir => a
+	sign place
+	redir end
+
+" e.g.
+" 	Signs for cpp1.cpp:
+" 		line=71  id=1  name=disabledbp
+" 		line=73  id=1  name=disabledbp
+" 	Signs for /usr/share/vim/current/doc/eval.txt:
+" 		line=4  id=1  name=bp1
+
+	let confirmed = 0
+	for line in split(a, "\n")
+		if s:mymatch(line, '\v\s+line\=(\d+)\s+id\=(\d+)') && has_key(s:bplist, s:match[2])
+			let lineno = s:match[1]
+			let id = s:match[2]
+			let bp = s:bplist[id]
+			if bp.line != lineno
+				if !confirmed 
+					let choice = confirm("Breakpoint position changes. Refresh now? (Choose No if the source code does not match the executable.)", "&Yes\n&No")
+					if choice != 1
+						break
+					endif
+					let confirmed = 1
+				endif
+				call s:delbp(id)
+				call s:setbp(bp.file, lineno, bp.disabled)
+			endif
+		endif
+	endfor
+endf
+
+function! s:setDebugging(val)
+	if s:debugging != a:val
+		if s:debugging == 0  " 0 -> 1: run/attach
+			call s:refreshBP()
+		endif
+		let s:debugging = a:val
+	endif
+endf
+
 "====== callback {{{
 let s:callmap={ 
 	\'setbp': 's:VGdb_cb_setbp', 
@@ -235,7 +322,7 @@ function! s:VGdb_cb_setbp(id, file, line, ...)
 		return
 	endif
 	let hint = a:0>0 ? a:1 : ''
-	let bp = {'file': a:file, 'line': a:line}
+	let bp = {'file': a:file, 'line': a:line, 'disabled': s:set_disabled_bp}
 	let f = s:getFixedPath(a:file)
 	if (hint == 'pending' && bufnr(a:file) == -1) || strlen(f)==0
 		let base = s:basename(a:file)
@@ -248,27 +335,30 @@ function! s:VGdb_cb_setbp(id, file, line, ...)
 	endif
 	call s:VGdb_goto(f, a:line)
 "	execute "sign unplace ". a:id
-	execute "sign place " .  a:id ." name=breakpoint line=".a:line." buffer=".bufnr(f)
+	if bp.disabled
+		call VGdb("disable ".a:id)
+	endif
+	call s:placebp(a:id, a:line, bufnr(f), bp.disabled)
 	let s:bplist[a:id] = bp
 endfunction
 
 function! s:VGdb_cb_delbp(id)
 	if has_key(s:bplist, a:id)
 		unlet s:bplist[a:id]
-		execute "sign unplace ". a:id
+		call s:unplacebp(a:id)
 	endif
 endf
 
 let s:last_id = 0
 function! s:VGdb_cb_setpos(file, line)
 	if a:line <= 0
-		let s:debugging = 1
+		call s:setDebugging(1)
 		return
 	endif
 
 	let s:nameMap[s:basename(a:file)] = a:file
 	call s:VGdb_goto(a:file, a:line)
-	let s:debugging = 1
+	call s:setDebugging(1)
 
 	" place the next line before unplacing the previous 
 	" otherwise display will jump
@@ -280,7 +370,7 @@ endf
 
 function! s:VGdb_cb_delpos()
 	execute "sign unplace ". (10000+s:last_id)
-	let s:debugging = 0
+	call s:setDebugging(0)
 endf
 
 function! s:VGdb_cb_exe(cmd)
@@ -456,27 +546,30 @@ function! VGdb(cmd, ...)  " [mode]
 	endif
 endf
 
-function! s:VGdb_curpos()
-	" ???? filename ????
-	let file = expand("%:t")
-	let line = line(".")
-	return file . ":" . line
-endf
-
 " Toggle breakpoints
-function! VGdb_toggle()
+function! VGdb_toggle(forDisable)
 	call s:gotoTgtWin()
 	let file = expand("%:t")
 	let line = line('.')
-	let key = s:VGdb_curpos()
 	for [id, bp] in items(s:bplist)
 		if bp.line == line && s:basename(bp.file) == file
-			call s:VGdb_cb_delbp(id)
-			call VGdb("clear ".key)
+			if ! a:forDisable
+				call s:delbp(id)
+			else
+				if bp.disabled
+					call VGdb("enable ".id)
+				else
+					call VGdb("disable ".id)
+				endif
+				let bp.disabled = !bp.disabled
+				call s:placebp(id, bp.line, bufnr("%"), bp.disabled)
+			endif
 			return
 		endif
 	endfor
-	call VGdb("break ".key)
+	if ! a:forDisable
+		call s:setbp('', 0, 0) " set on current position
+	endif
 endf
 
 function! VGdb_jump()
@@ -514,7 +607,8 @@ function! s:VGdb_shortcuts()
 	inoremap <buffer> <silent> <TAB> <C-X><C-L>
 	"nnoremap <buffer> <silent> : <C-W>p:
 
-	nmap <silent> <F9>	 :call VGdb_toggle()<CR>
+	nmap <silent> <F9>	 :call VGdb_toggle(0)<CR>
+	nmap <silent> <C-F9>	 :call VGdb_toggle(1)<CR>
 	nmap <silent> <Leader>ju	 :call VGdb_jump()<CR>
 	nmap <silent> <C-S-F10>		 :call VGdb_jump()<CR>
 	nmap <silent> <C-F10> :call VGdb_runToCursur()<CR>
@@ -531,7 +625,7 @@ function! s:VGdb_shortcuts()
 	map <silent> <F11>   :VGdb s<cr>
 	map <silent> <S-F11> :VGdb finish<cr>
 
-	amenu VGdb.Toggle\ breakpoint<tab>F9			:call VGdb_toggle()<CR>
+	amenu VGdb.Toggle\ breakpoint<tab>F9			:call VGdb_toggle(0)<CR>
 	amenu VGdb.Run/Continue<tab>F5 					:VGdb c<CR>
 	amenu VGdb.Step\ into<tab>F11					:VGdb s<CR>
 	amenu VGdb.Next<tab>F10							:VGdb n<CR>
@@ -617,10 +711,13 @@ function! VGdb_expandPointerExpr()
 	endif
 	return 1
 endf
+"}}}
 
+" ====== commands {{{
 command -nargs=* -complete=file VGdb :call VGdb(<q-args>)
 ca gdb VGdb
 ca Gdb VGdb
 " directly show result; must run after VGdb is running
 command -nargs=* -complete=file VGdbcall :echo VGdb_call(<q-args>)
-
+"}}}
+" vim: set foldmethod=marker :

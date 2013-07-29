@@ -2,8 +2,24 @@
 
 BIN=/usr/local/bin
 VIMFILES=/usr/share/vim/site
+
+echo -n "binary dir? ($BIN) " ; read opt
+[ -n "$opt" ] && BIN=$opt
+
+echo -n "vimfiles dir? ($VIMFILES) " ; read opt
+[ -n "$opt" ] && VIMFILES=$opt
+
 cp ./vgdb $BIN/
 #cp ./libvgdbc.so /usr/lib64
 cp ./vgdb.vim $VIMFILES/plugin/vgdb.vim
 cp ./__README__.txt $VIMFILES/doc/vgdb.txt
-vim -c "helptags $VIMFILES/doc | h vgdb.txt | only"
+
+echo -n "view doc? (=y/n) " ; read opt
+[ -n "$opt" ] || opt=y
+
+if [[ $opt == "y" ]]; then
+	vim -c "helptags $VIMFILES/doc | h vgdb.txt | only"
+else
+	vim -c "helptags $VIMFILES/doc | q"
+	echo done!
+fi
