@@ -112,6 +112,16 @@ So do struct/class members of pointer type: >
 	}
 press enter on the line of "m_strData" to show this member instead of pointer.
 
+2.4) Thread switch
+show all threads: >
+	i thr
+it show threads like this: >
+	  4    Thread 0x7fc53b3cf700 (LWP 25792) ... from /lib64/libpthread.so.0
+	  3    Thread 0x7fc53b2ce700 (LWP 25793) ... from /lib64/libpthread.so.0
+	* 1    Thread 0x7fc54fa8e700 (LWP 25766) ... from /lib64/libpthread.so.0
+double click or press <cr> on the line, it switch to this thread and show the
+call stack.
+
 3) Shortcuts
 
 The following shortcuts is applied that is similar to MSVC: 
@@ -166,6 +176,14 @@ continue running. You first switch the frame into Fun1, e.g. >
 	:VGdb up
 Then move the cursor to the new line and press "\ju". VGdb will fix the stack
 besides jumping.
+
+7) Pause the execution
+
+As you know you can press <Ctrl-C> in gdb to pause the execution and then
+inspect. But in vgdb, when the target program is running, you cannot get control
+in vim. Instead, please send signal like this: >
+	killall -INT gdb
+Then you can get control in vgdb.
 
 ==============================================================================
 *5* Preview variable (auto expand)			*vgdb-preview*

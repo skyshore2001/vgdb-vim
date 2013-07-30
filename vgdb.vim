@@ -486,15 +486,24 @@ function! VGdb(cmd, ...)  " [mode]
 			exe "normal I" . s:vgdb_prompt
 		endif
 	endif
-	if s:mymatch(usercmd, '\v#(\d+)') && s:debugging
+	" goto frame
+	" 	i br (info breakpoints)
+	" 	#0  0x00007fc54f6955e7 in recv () from /lib64/libpthread.so.0
+	if s:mymatch(usercmd, '\v^#(\d+)') && s:debugging
 		let usercmd = "@frame " . s:match[1]
 		let stayInTgtWin = 1
 		let mode = 'n'
+	
+	" goto thread and show frames
+	" 	i thr (info threads)
+	" 	7    Thread 0x7fc54032b700 (LWP 25787) "java" 0x00007fc54f6955e7 in recv () from /lib64/libpthread.so.0
+	elseif s:mymatch(usercmd, '\v^\s+(\d+)\s+Thread ') && s:debugging
+		let usercmd = "@thread " . s:match[1] . "; bt"
 
 	" Breakpoint 1, TmScrParser::Parse (this=0x7fffffffbbb0) at ../../BuildBuilder/CreatorDll/TmScrParser.cpp:64
 	" Breakpoint 14 at 0x7ffff7bbeec1: file ../../BuildBuilder/CreatorDll/RDLL_SboP.cpp, line 111.
 	" Breakpoint 6 (/home/builder/depot/BUSMB_B1/SBO/9.01_DEV/BuildBuilder/CreatorDll/RDLL_SboP.cpp:92) pending.
-	elseif s:mymatch(usercmd, '\vat (..[^:]*):(\d+)') || s:mymatch(usercmd, '\vfile ([^,]+), line (\d+)') || s:mymatch(usercmd, '\v\((..[^:]*):(\d+)\)')
+	elseif s:mymatch(usercmd, '\v<at (..[^:]*):(\d+)') || s:mymatch(usercmd, '\vfile ([^,]+), line (\d+)') || s:mymatch(usercmd, '\v\((..[^:]*):(\d+)\)')
 		call s:VGdb_goto(s:match[1], s:match[2])
 		return
 	elseif mode == 'n'  " mode n: jump to source or current callstack, dont exec other gdb commands
