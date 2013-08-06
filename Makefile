@@ -1,5 +1,6 @@
 CC=g++
 CXX=g++
+VER=1.2a
 
 ifdef windir
 
@@ -55,6 +56,13 @@ cpp1: cpp1.cpp Makefile
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
 
 endif
+
+NAME=vgdb-$(VER)
+DIST=$(NAME).tgz
+
+dist:
+	git archive --format tgz --output $(DIST) --prefix=$(NAME)/ HEAD
+	@echo $(DIST) generated.
 
 ######
 vgdbc.o: vgdbc.c Makefile

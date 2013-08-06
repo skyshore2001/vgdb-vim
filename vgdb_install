@@ -10,6 +10,7 @@ echo -n "vimfiles dir? ($VIMFILES) " ; read opt
 [ -n "$opt" ] && VIMFILES=$opt
 
 cp ./vgdb $BIN/
+chmod a+x $BIN/vgdb
 #cp ./libvgdbc.so /usr/lib64
 cp ./vgdb.vim $VIMFILES/plugin/vgdb.vim
 cp ./__README__.txt $VIMFILES/doc/vgdb.txt
