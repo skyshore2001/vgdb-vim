@@ -315,7 +315,7 @@ let s:callmap={
 	\'delpos': 's:VGdb_cb_delpos', 
 	\'exe': 's:VGdb_cb_exe', 
 	\'quit': 's:VGdb_cb_close' 
-\}
+\ }
 
 function! s:VGdb_cb_setbp(id, file, line, ...)
 	if has_key(s:bplist, a:id)
