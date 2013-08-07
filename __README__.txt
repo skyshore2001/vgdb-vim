@@ -3,16 +3,16 @@
 		    VGdb - Visual Gdb in VIM, v1
 		    Liang, Jian - 2013/1
 
-|1| Introduction					|vgdb|
-|2| Install						|vgdb-install|
-|3| Start vgdb						|:VGdb|
-|4| Using vgdb						|vgdb-using|
-|5| Preview variable (auto expand)			|vgdb-preview|
-|6| VGdb client						|vgdbc|
-|7| Contact me						|vgdb-contact|
+1. Introduction						|vgdb|
+2. Install						|vgdb-install|
+3. Start vgdb						|:VGdb|
+4. Using vgdb						|vgdb-using|
+5. Preview variable (auto expand)			|vgdb-preview|
+6. VGdb client						|vgdbc|
+7. Contact me						|vgdb-contact|
 
 ==============================================================================
-*1* Introduction					*vgdb*
+1. Introduction					*vgdb*
 
 VGdb is a perl program that allows the use of vim as a front end to gdb. It
 both works on MS Windows and Linux. It both works in gvim and vim.
@@ -26,14 +26,14 @@ define how to preview structure like MSVC auto expand feature.
 A flash demo in my package helps you quickly go through the vgdb features.
 
 ==============================================================================
-*2* Install						*vgdb-install*
+2. Install						*vgdb-install*
+
+On Linux, run vgdb_install and specify path. >
+	# sh vgdb_install
 
 On MS Windows, you need install Perl (and of course gcc/gdb).
 Modify vgdb.bat for your path.
-Modify vgdb_install_mswin.bat that actually copy files to your folder.
-Run vgdb_install_mswin.bat to copy files.
-
-On Linux, modify path in script vgdb_install and run it. 
+Run vgdb_install_mswin.bat that actually copy files to your folder.
 
 Note: 
 gvim MUST in the default search path.
@@ -48,7 +48,7 @@ Perl 5.10.0 for x86_64-linux
 Gdb 7.3 x86_64-suse-linux
 
 ==============================================================================
-*3* Start vgdb							*:VGdb*
+3. Start vgdb							*:VGdb*
 
 * method 1: in vim or gvim, run :VGdb command, e.g. >
 
@@ -67,7 +67,7 @@ You can directly type "gdb" in vi command line as it's set to be the abbreviatio
 	$ vgdb cpp1
 
 ==============================================================================
-*4*  Using vgdb							*vgdb-using*
+4. Using vgdb							*vgdb-using*
 
 A flash demo (__VGDB_DEMO__.htm) in my package helps you quickly go through the
 vgdb features. Here are how you can use vgdb:
@@ -186,7 +186,7 @@ in vim. Instead, please send signal like this: >
 Then you can get control in vgdb.
 
 ==============================================================================
-*5* Preview variable (auto expand)			*vgdb-preview*
+5. Preview variable (auto expand)			*vgdb-preview*
 
 If a structure/class has many member variables and you are only interested in some
 of them, or you want to make the variables more readable, this feature is very
@@ -220,7 +220,7 @@ debugging.
 Change in autoexp.dat will immediately take effects.
 
 ==============================================================================
-*6* VGdb client						*vgdbc*
+6. VGdb client						*vgdbc*
 
 VGdb is a client-server program via socket that enables it both runs on MS
 Windows and Linux. The perl program vgdb is the server program. It also works 
@@ -259,7 +259,7 @@ is set. You can inspect this variable: >
 
 
 ==============================================================================
-*7* Contact me						*vgdb-contact*
+7. Contact me						*vgdb-contact*
 
 Liang, Jian - skyshore@gmail.com
 
