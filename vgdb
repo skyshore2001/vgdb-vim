@@ -283,7 +283,8 @@ sub parseGdbLine  # ($comm, $line, $hideout)
 	# 'Breakpoint 2 (/home/builder/depot/BUSMB_B1/SBO/9.01_DEV/BuildBuilder/CreatorDll/TmScrParser.cpp:115) pending.'
 	# encounter a BP:
 	# 'Breakpoint 11, DBMCSqlStatement::ExecDirect (this=0x7fffffff9350, query=..., env=0x637760) at ../Infrastructure/Engines/DBM/__DBMC_Statement.cpp:178'
-	elsif (/^Breakpoint (\d+) at [^:]+: file ([^,]+), line (\d+)/ || /^Breakpoint (\d+) \((..[^:]+):(\d+)\) (pending)./ || /^Breakpoint (\d+).* at (..[^:]+):(\d+)/) {
+	# 'Breakpoint 17 at 0x7fc3f1f8b523: B1FileWriter.cpp:268. (2 locations)'
+	elsif (/^Breakpoint (\d+) at [^:]+: file ([^,]+), line (\d+)/ || /^Breakpoint (\d+) \((..[^:]+):(\d+)\) (pending)./ || /^Breakpoint (\d+).* at (?:0x\S+ )?(..[^:]+):(\d+)/) {
 		my ($id, $f, $ln, $hint) = ($1, $2, $3, $4 || '');
 		$f =~ s/\\/\//g;
 		$cmd = "setbp($id, \"$f\", $ln, \"$hint\")";

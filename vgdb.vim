@@ -503,7 +503,8 @@ function! VGdb(cmd, ...)  " [mode]
 	" Breakpoint 1, TmScrParser::Parse (this=0x7fffffffbbb0) at ../../BuildBuilder/CreatorDll/TmScrParser.cpp:64
 	" Breakpoint 14 at 0x7ffff7bbeec1: file ../../BuildBuilder/CreatorDll/RDLL_SboP.cpp, line 111.
 	" Breakpoint 6 (/home/builder/depot/BUSMB_B1/SBO/9.01_DEV/BuildBuilder/CreatorDll/RDLL_SboP.cpp:92) pending.
-	elseif s:mymatch(usercmd, '\v<at (..[^:]*):(\d+)') || s:mymatch(usercmd, '\vfile ([^,]+), line (\d+)') || s:mymatch(usercmd, '\v\((..[^:]*):(\d+)\)')
+	" Breakpoint 17 at 0x7fc3f1f8b523: B1FileWriter.cpp:268. (2 locations)
+	elseif s:mymatch(usercmd, '\v<at %(0x\S+ )?(..[^:]*):(\d+)') || s:mymatch(usercmd, '\vfile ([^,]+), line (\d+)') || s:mymatch(usercmd, '\v\((..[^:]*):(\d+)\)')
 		call s:VGdb_goto(s:match[1], s:match[2])
 		return
 	elseif mode == 'n'  " mode n: jump to source or current callstack, dont exec other gdb commands
