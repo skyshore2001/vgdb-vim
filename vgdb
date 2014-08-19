@@ -17,7 +17,7 @@ use strict;
 use warnings;
 
 ###### config {{{
-my $VER = '1.2';
+my $VER = '1.3a';
 my $VERINFO = "vgdb version $VER.\n";
 
 my $IS_MSWIN = $^O eq 'MSWin32';
@@ -256,11 +256,16 @@ if($gdb_task == 0)
 
 close GDB_RD;
 close GDB_WR;
+#}}}
 
+###### msg task functions {{{
 unless(defined($msg_task = fork()))
 {
 	die("Unable to fork");
 }
+
+### Globals
+my @cmdlist;
 
 my $is_debugging = 0;
 sub parseGdbLine  # ($comm, $line, $hideout)
@@ -292,6 +297,13 @@ sub parseGdbLine  # ($comm, $line, $hideout)
 	# 'clear cpp1.cpp:13' -> 'Deleted breakpoint 1'
 	elsif (/^Deleted breakpoint (\d+)/) { 
 		$cmd = "delbp($1)";
+	}
+	# auto "up" on catchpoint hits
+	# Catchpoint 2 (exception thrown), 0x004014f0 in __cxa_throw ()
+	# Catchpoint 3 (exception caught), 0x00401518 in __cxa_begin_catch ()
+	elsif (/^Catchpoint (\d+) \(exception (thrown|caught)\)/) {
+		unshift @cmdlist, "up";
+		msg "=== auto frame up\n"; 
 	}
 	# '[Inferior 1 (process 11468) exited normally]'
 	# 'Kill the program being debugged? (y or n) [answered Y; input not from terminal]'
@@ -572,14 +584,14 @@ if($msg_task == 0)
 	{
 		my $cmds = $comm->get() || '';
 		mychop($cmds);
-		my @cmdlist;
+		@cmdlist = ();
 		if ($cmds eq '' || index($cmds, '"') >= 0) {
 			push @cmdlist, $cmds;
 		}
 		else {
 			@cmdlist = split /;/, $cmds;
 		}
-		for (@cmdlist) {
+		while (local $_ = shift @cmdlist) {
 			s/^\s+//;
 			s/\s+$//;
 

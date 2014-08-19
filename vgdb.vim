@@ -56,6 +56,7 @@ sign define current linehl=Search text=>> texthl=Search
 
 " highlight vgdbGoto guifg=Blue
 hi def link vgdbKey Statement
+hi def link vgdbHiLn Statement
 hi def link vgdbGoto Underlined
 hi def link vgdbPtr Underlined
 hi def link vgdbFrame LineNr
@@ -599,11 +600,14 @@ endf
 function! s:VGdb_shortcuts()
 
 	" syntax
-	syn keyword vgdbKey Function Breakpoint Num Type Disp Enb Address What
+	syn keyword vgdbKey Function Breakpoint Catchpoint 
 	syn match vgdbFrame /\v^#\d+ .*/ contains=vgdbGoto
-	syn match vgdbGoto /\vat .+:\d+|file .+, line \d+/
+	syn match vgdbGoto /\v<at .+:\d+|file .+, line \d+/
 	syn match vgdbCmd /^(gdb).*/
 	syn match vgdbPtr /\v(^|\s+)\zs\$?\w+ \=.{-0,} 0x\w+/
+	" highlight the whole line for 
+	" returns for info threads | info break | finish | watchpoint
+	syn match vgdbHiLn /\v^\s*(Id\s+Target Id|Num\s+Type|Value returned is|(Old|New) value =|Hardware watchpoint).*$/
 
 	" shortcut in VGDB window
     inoremap <buffer> <silent> <CR> <c-o>:call VGdb(getline('.'), 'i')<cr>

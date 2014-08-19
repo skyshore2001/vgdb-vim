@@ -1,6 +1,6 @@
 CC=g++
 CXX=g++
-VER=1.2
+VER=1.3a
 
 ifdef windir
 
