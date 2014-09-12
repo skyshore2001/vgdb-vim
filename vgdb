@@ -153,9 +153,9 @@ sub get
 #}}}
 
 package main;
-my $isclient = ($ARGV[0] && $ARGV[0] eq '-c');
 
 ###### run as client {{{
+my $isclient = ($ARGV[0] && $ARGV[0] eq '-c');
 sub runClient # ($cmds)
 {
 	my ($cmds) = @_;
@@ -172,7 +172,7 @@ sub runClient # ($cmds)
 
 if ($isclient) {
 	runClient($ARGV[1]);
-	goto END_SCRIPT;
+	exit;
 }
 
 #}}}
@@ -185,85 +185,11 @@ sub mychop
 
 sub msg # ($msg, [$force=0])
 {
-	print NEWERR $_[0] if $ENV{VGDB_DEBUG} || $_[1];
+	print STDERR $_[0] if $ENV{VGDB_DEBUG} || $_[1];
 }
 #}}}
 
-###### run as server
-#my $VIM_EXE = 'gvim --nofork';
-my $VIM_EXE = 'gvim -f';
-# !!! use -f for --nofork because if on MSWin32 vim installs a gvim.bat that does not support --nofork.
-
-my $calledByVim = $ARGV[0] && $ARGV[0] eq '-vi';
-if ($calledByVim) {
-	shift @ARGV;
-}
-
-# setup pipes for communication
-pipe(VIM_RD, GDB_WR);  
-pipe(GDB_RD, VIM_WR);
-
-# backup old OUT/ERR. To work around bugs on windows
-#open NEWOUT, ">&STDOUT";
-open NEWERR, ">&STDERR";
-
-my $gdb_task;
-my $msg_task;
-unless(defined($gdb_task = fork()))
-{
-	die("Unable to fork");
-}
-
-###### gdb task {{{
-if($gdb_task == 0)
-{
-	msg "[$$] GDB Task\n";
-	close VIM_RD;
-	close VIM_WR;
-
-	open(STDERR, ">&GDB_WR")     || die "Can't redirect stdout";
-	open(STDOUT, ">&GDB_WR")     || die "Can't redirect stdout";
-    open(STDIN, "<&GDB_RD")    || die "Can't redirect stdin";
-	close GDB_WR;
-	close GDB_RD;
-
-# 	select(STDOUT);    $| = 1; # make unbuffered
-# 	select(STDERR);    $| = 1; # make unbuffered
-
-	# -q: no version info; -f: output for emacs (file:lineno after each cmd)
-	my $gdbcmd = "gdb -f -q ";
-	#my $gdbcmd = "gdb --interpreter=mi ";
-	my $params = join(' ', @ARGV) || '';
-	if (!$IS_MSWIN) {
-		if ($params !~ /tty/ && $TTY) {
-			$gdbcmd .= " --tty=$TTY";
-		}
-	}
-	$gdbcmd .= " $params";
-	msg "[$$] start gdb: '$gdbcmd'\n";
-	if(system($gdbcmd) != 0)
-	#if(system("gdb", "--interpreter=mi", "-q", "--args", @ARGV) != 0)
-	{
-		print NEWERR "[$$] start GDB error: $!\n";
-#		kill(15, getppid());
-	}
-	print STDERR "%%q\n"; # quit signal to the msg task
-	close STDERR;
-	close STDOUT;
-	msg "[$$] GDB quits.\n";
-	exit;
-}
-
-close GDB_RD;
-close GDB_WR;
-#}}}
-
-###### msg task functions {{{
-unless(defined($msg_task = fork()))
-{
-	die("Unable to fork");
-}
-
+###### functions {{{
 ### Globals
 my @cmdlist;
 
@@ -344,13 +270,12 @@ sub parseGdbLine  # ($comm, $line, $hideout)
 sub execCmd # ($comm, $cmd, [$hideout=0])
 {
 	my ($comm, $cmd, $hideout) = @_;
-	print VIM_WR "$cmd\n";
+	print GDB_WR "$cmd\n";
 	msg "(gdb) '$cmd'\n";
-	while(<VIM_RD>)
+	while(<GDB_RD>)
 	{
 		mychop($_);
 		msg ">>> '$_'\n", !/^\032/;
-		last if /^%%q$/;  # quit signal from gdb task. (bugfix on MSWindows)
 		parseGdbLine($comm, $_, $hideout);
 		if(/\(gdb\)$/) {
 			return 1;
@@ -561,14 +486,25 @@ sub execPreviewCmd # ($comm, $expr, $hideout)
 	}
 	1;
 }
-#}}}
 
-###### msg task {{{
-select(VIM_WR);    $| = 1; # make unbuffered
-if($msg_task == 0)
+# handle @ARGV
+sub startGdb
 {
-	msg $VERINFO, 1;
-	msg "[$$] msg task\n";
+	# -q: no version info; -f: output for emacs (file:lineno after each cmd)
+	my @cmd = (qw(gdb -f -q), @ARGV);
+	#my $gdbcmd = "gdb --interpreter=mi ";
+	if (!$IS_MSWIN) {
+		if ($TTY && grep /tty/, @ARGV) {
+			push @cmd, "--tty=$TTY";
+		}
+	}
+
+	use IPC::Open3;
+	msg "start gdb: '" . join(' ', @cmd) . "'\n";
+	my $gdb_task = open3(\*GDB_WR, \*GDB_RD, \*GDB_RD, @cmd)
+		or die("start GDB error: $!\n");
+	select(GDB_WR);    $| = 1; # make unbuffered
+
 	execCmd(undef, 'set prompt (gdb)\n');
 	if ($IS_MSWIN) {
     execCmd(undef, 'set new-console on');
@@ -576,9 +512,40 @@ if($msg_task == 0)
 	execCmd(undef, 'set print pretty on');
 	execCmd(undef, 'set breakpoint pending on');
 	execCmd(undef, 'set pagination off');
+}
+
+sub startVim
+{
+use threads;
+	#my $VIM_EXE = 'gvim --nofork';
+	my $VIM_EXE = 'gvim -f';
+	# !!! use -f for --nofork because if on MSWin32 vim installs a gvim.bat that does not support --nofork.
+	msg "starting VIM.\n";
+	threads->new(sub {
+		system($VIM_EXE . ' -c "call VGdb_open()"');
+	})->detach();
+}
+#}}}
+
+###### main routine {{{
+	my $calledByVim = $ARGV[0] && $ARGV[0] eq '-vi';
+	if ($calledByVim) {
+		shift @ARGV;
+	}
+
+	msg $VERINFO, 1;
+
+	startGdb();
 
 	my $comm = CommInet->new();
-	msg "[$$] msg task start listening at $VGDB_PORT\n";
+	msg "vgdb is listening on TCP $VGDB_PORT\n";
+
+	unless ($calledByVim)
+	{
+		# note: after TCP port is listening
+		startVim();
+	}
+
 	my $gdbQuit = 0;
 	while(! $gdbQuit)
 	{
@@ -591,7 +558,7 @@ if($msg_task == 0)
 		else {
 			@cmdlist = split /;/, $cmds;
 		}
-		while (local $_ = shift @cmdlist) {
+		while (defined (local $_ = shift @cmdlist)) {
 			s/^\s+//;
 			s/\s+$//;
 
@@ -610,31 +577,7 @@ if($msg_task == 0)
 		}
 	}
 	$comm->destroy();
-	msg "[$$] msg task exits\n";
-	exit;
-}
+	msg "vgdb exits\n";
 #}}}
 
-###### main task {{{
-unless ($calledByVim)
-{
-	msg "[$$] main: starting VIM.\n";
-
-	system($VIM_EXE . ' -c "call VGdb_open()"');
-
-#	print VIM_WR "quit\n";
-
-#	kill(15, $gdb_task, $msg_task);
-}
-else 
-{
-	msg "[$$] Main Task\n";
-}
-
-while(wait() != -1)
-{
-}
-#}}}
-
-END_SCRIPT:
 # vim: set foldmethod=marker :
