@@ -32,13 +32,12 @@ On Linux, run vgdb_install and specify path. >
 	# sh vgdb_install
 
 On MS Windows, you need install Perl (and of course gcc/gdb).
-Modify vgdb.bat for your path.
 Run vgdb_install_mswin.bat that actually copy files to your folder.
 
 Note: 
 gvim MUST in the default search path.
 
-My dev envrionment:
+My dev environment:
 Windows: 
 Perl 5.8.8 MSWin32-x86
 Gdb 7.4 i686-pc-mingw32
@@ -60,7 +59,7 @@ You can directly type "gdb" in vi command line as it's set to be the abbreviatio
 
 	:gdb
 
-* method 2: Run vgdb (or vgdb.bat on Widnows)
+* method 2: Run vgdb (or vgdb.bat on Windows)
   it open gvim with the __VGDB__ window for gdb command: >
 	
 	$ vgdb
@@ -100,7 +99,7 @@ it shows frames like this >
 	#1 ...
 double click or press <cr> on the #xx line, it directly goto the frame.
 
-2.3) Derefernece a pointer
+2.3) Dereference a pointer
 A pointer variable is only shown like this: >
 	$1 = (SBOString *) 0x7fffffffde10
 press enter on this line will get the content just like you run >
@@ -193,7 +192,7 @@ of them, or you want to make the variables more readable, this feature is very
 useful. MSVC debugger provides a file named "autoexp.dat" for you to define your
 own auto expand rules. VGdb is partially compatible with this file.
 
-You can find an exmaple program cpp1.cpp and the sample autoexp.dat. In the
+You can find an example program cpp1.cpp and the sample autoexp.dat. In the
 program, class "SBOString" has a "SBOStringData" pointer and "SBOStringData"
 contains the real readable wchar_t string. If you print a SBOString variable,
 gdb outputs the pointer value. Now you can define the preview rule in
@@ -229,7 +228,7 @@ as a client by "-c" option, for example: >
 	vgdb -c "b main"
 
 It is called by vim.
-The port is auto generated and stored in the envrionment variable *$VGDB_PORT* .
+The port is auto generated and stored in the environment variable *$VGDB_PORT* .
 You can directly set the variable to force use some port.
 
 On MS Windows, "vgdb -c" pops up a console window every time as it's a perl

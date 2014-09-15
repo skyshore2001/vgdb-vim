@@ -1,1 +1,1 @@
-@perl E:\share\linux\vgdb-vim\vgdb %*
+@perl %CD%\vgdb %*
