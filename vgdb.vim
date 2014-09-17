@@ -6,8 +6,8 @@
 " Feedback welcome.
 """""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-" Prevent multiple loading, allow commenting it out
-if exists("loaded_vgdb")
+" Prevent multiple loading unless: let force_load=1
+if exists("loaded_vgdb") && !exists("force_load")
 	finish
 endif
 
@@ -18,6 +18,7 @@ let loaded_vgdb = 1
 let s:vgdb_winheight = 10
 let s:vgdb_bufname = "__VGDB__"
 let s:vgdb_prompt = '(gdb) '
+let s:dbg = 'gdb'
 
 " used by system-call style
 let s:vgdb_client = "vgdb -c" " on MSWin, actually the vgdb.bat is called in the search path
@@ -196,11 +197,16 @@ function! VGdb_open()
     augroup end
 
 	call s:VGdb_shortcuts()
-	exe "normal I" . s:vgdb_prompt
-	starti!
 	
 	let s:vgdb_running = 1
 
+" 	if s:dbg == "gdb"
+" 		exe "normal I" . s:vgdb_prompt
+" 	else
+		call VGdb(".get") " get init msg
+" 	endif
+	starti!
+	
 	"wincmd p
 endfunction
 
@@ -310,6 +316,7 @@ endf
 
 "====== callback {{{
 let s:callmap={ 
+	\'setdbg': 's:setdbg', 
 	\'setbp': 's:VGdb_cb_setbp', 
 	\'delbp': 's:VGdb_cb_delbp', 
 	\'setpos': 's:VGdb_cb_setpos', 
@@ -317,6 +324,10 @@ let s:callmap={
 	\'exe': 's:VGdb_cb_exe', 
 	\'quit': 's:VGdb_cb_close' 
 \ }
+
+function! s:setdbg(dbg)
+	s:dbg = a:dbg
+endf
 
 function! s:VGdb_cb_setbp(id, file, line, ...)
 	if has_key(s:bplist, a:id)
@@ -477,8 +488,10 @@ function! VGdb(cmd, ...)  " [mode]
 
 	let curwin = winnr()
 	let stayInTgtWin = 0
-	if usercmd =~ '^\s*(gdb)' 
+	if s:dbg == 'gdb' && usercmd =~ '^\s*(gdb)' 
 		let usercmd = substitute(usercmd, '^\s*(gdb)\s*', '', '')
+	elseif s:dbg == 'perldb' && usercmd =~ '^\s*DB<'
+		let usercmd = substitute(usercmd, '^\s*DB<\+\d\+>\+\s*', '', '')
 	elseif mode == 'i'
 		if line('.') != line('$')
 			call append('$', s:vgdb_prompt . usercmd)
@@ -543,7 +556,7 @@ function! VGdb(cmd, ...)  " [mode]
 
 	if mode == 'i' && !stayInTgtWin
 		call s:gotoGdbWin()
-		if getline('$') != s:vgdb_prompt
+		if s:dbg == 'gdb' && getline('$') != s:vgdb_prompt
 			call append('$', s:vgdb_prompt)
 		endif
 		$
@@ -728,10 +741,10 @@ endf
 "}}}
 
 " ====== commands {{{
-command -nargs=* -complete=file VGdb :call VGdb(<q-args>)
+command! -nargs=* -complete=file VGdb :call VGdb(<q-args>)
 ca gdb VGdb
 ca Gdb VGdb
 " directly show result; must run after VGdb is running
-command -nargs=* -complete=file VGdbcall :echo VGdb_call(<q-args>)
+command! -nargs=* -complete=file VGdbcall :echo VGdb_call(<q-args>)
 "}}}
 " vim: set foldmethod=marker :
