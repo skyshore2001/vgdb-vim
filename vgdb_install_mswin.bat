@@ -37,7 +37,7 @@ set /p opt="vimfiles dir? (%VIMFILES%) "
 if not "%opt%"=="" set VIMFILES=%opt%
 
 rem vgdb.bat and vgdbc.dll MUST in the search path, e.g. c:\windows\system32
-echo @%PERL% %CD%\vgdb %* > %BIN%\vgdb.bat
+echo @%PERL% %CD%\vgdb %%* > %BIN%\vgdb.bat
 :: copy vgdb.bat %BIN%\
 copy vgdbc.dll %BIN%\
 
