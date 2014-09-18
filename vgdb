@@ -207,9 +207,6 @@ sub parseGdbLine  # ($comm, $line, $hideout)
 		$cmd = "quit()";
 		$hideout =1;
 	}
-	elsif (s/\(gdb\)//g && /^\s*$/) {
-		$hideout = 1;
-	}
 	# set a BP:
 	# 'b main' -> 'Breakpoint 2 at 0x4013cb: file cpp1.cpp, line 13.'
 	# 'Breakpoint 2 (/home/builder/depot/BUSMB_B1/SBO/9.01_DEV/BuildBuilder/CreatorDll/TmScrParser.cpp:115) pending.'
@@ -320,11 +317,20 @@ sub filterCmd # ($cmd, $comm)
 
 sub matchPrompt # ($line, $ch)
 {
-	return if $_[1] ne ' ';
-	# prompt: "  DB<1> "
-	return if length($_[0]) < 8;
-	return if substr($_[0], -2, 1) ne '>';
-	return $_[0] =~ /^  DB<+\d+>+ $/;
+	if ($DBG eq 'perldb')
+	{
+		return if $_[1] ne ' ';
+		# prompt: "  DB<1> "
+		return if length($_[0]) < 8;
+		return if substr($_[0], -2, 1) ne '>';
+		return $_[0] =~ /^  DB<+\d+>+ $/;
+	}
+	elsif ($DBG eq 'gdb')
+	{
+		return if $_[1] ne ' ';
+		# prompt: "  DB<1> "
+		return $_[0] eq '(gdb) ';
+	}
 }
 
 # read until "\n" or <prompt>
@@ -335,6 +341,7 @@ sub mygetline # ($in, \$isEnd)
 	my ($line, $ch, $ch2);
 	while (1) {
 		read ($in, $ch, 1) or last;
+# 		msg "###ch###n";
 		$line .= $ch;
 		last if $ch eq "\n";
 		do {$$pIsEnd =1; last} if matchPrompt($line, $ch);
@@ -352,25 +359,12 @@ sub execCmd # ($comm, $cmd, [$hideout=0])
 		print GDB_WR "$cmd\n";
 		msg "(gdb) '$cmd'\n";
 	}
-	if ($DBG eq 'gdb') {
-		while(<GDB_RD>)
-		{
-			mychop($_);
-			msg ">>> '$_'\n", !/^\032/;
-			parseGdbLine($comm, $_, $hideout);
-			if(/\(gdb\)$/) {
-				return 1;
-			}
-		}
-	}
-	else {
-		my $isEnd = 0;
-		while (defined ($_ = mygetline(\*GDB_RD, \$isEnd))) {
-			s/[\r\n]+$//;
-			msg ">>> '$_'\n", !/^\032/;
-			parseGdbLine($comm, $_, $hideout);
-			return 1 if $isEnd;
-		}
+	my $isEnd = 0;
+	while (defined ($_ = mygetline(\*GDB_RD, \$isEnd))) {
+		s/[\r\n]+$//;
+		msg ">>> '$_'\n", !/^\032/;
+		parseGdbLine($comm, $_, $hideout);
+		return 1 if $isEnd;
 	}
 	
 	# gdb quits
@@ -443,9 +437,19 @@ sub execVgdbCmd # ($comm, $cmd, [$hideout=0])
 	elsif ($cmd =~ /^p\s+(.+)$/) {
 		$rv = execPreviewCmd($comm, $1, $hideout);
 	}
-	elsif ($cmd eq 'get') {
-		$comm->put("vi:setdbg($DBG)\n");
+	elsif ($cmd eq 'init') {
+		$comm->put("vi:setdbg(\"$DBG\")\n");
 		$rv = execCmd($comm, undef); # no cmd, just get e.g. the init msg
+
+		if ($DBG eq 'gdb') {
+#			execCmd(undef, 'set prompt (gdb)\n');
+			if ($IS_MSWIN) {
+				execCmd(undef, 'set new-console on');
+			}
+			execCmd(undef, 'set print pretty on');
+			execCmd(undef, 'set breakpoint pending on');
+			execCmd(undef, 'set pagination off');
+		}
 	}
 	else {
 		$comm->put("!!! unknown vgdb command: '$cmd'\n");
@@ -583,20 +587,38 @@ sub execPreviewCmd # ($comm, $expr, $hideout)
 	1;
 }
 
+# require: @ARGV
 sub guessDBG
 {
-	if ($_[0] =~ /\.pl$/i) {
+	local $_ = $ARGV[0];
+	return 'gdb' if !defined $_;
+	if ($_ eq '-pl') {
+		shift @ARGV;
 		return 'perldb';
 	}
-	if ($_[0] =~ /\.py$/i) {
+	if ($_ eq '-py') {
+		shift @ARGV;
 		return 'pydb';
 	}
-	if ($_[0] =~ /\.js$/i) {
+	if ($_ eq '-js') {
+		shift @ARGV;
 		return 'jsdb';
 	}
-	if (-f $_[0]) {
+
+	if (/\.pl$/i) {
+		return 'perldb';
+	}
+	if (/\.py$/i) {
+		return 'pydb';
+	}
+	if (/\.js$/i) {
+		return 'jsdb';
+	}
+
+	# check "#!perl"
+	if (-f $_) {
 		my $line;
-		open I, $_[0];
+		open I, $_;
 		read I, $line, 100;
 		$line =~ s/[\r\n].*$//s;
 		close I;
@@ -615,7 +637,7 @@ sub guessDBG
 # handle @ARGV
 sub startGdb
 {
-	$DBG = guessDBG($ARGV[0]);
+	$DBG = guessDBG();
 
 	my @cmd;
 	if ($DBG eq 'gdb') {
@@ -641,16 +663,6 @@ sub startGdb
 	my $gdb_task = open3(\*GDB_WR, \*GDB_RD, \*GDB_RD, @cmd)
 		or die("start $DBG error: $!\n");
 	select(GDB_WR);    $| = 1; # make unbuffered
-
-	if ($DBG eq 'gdb') {
-		execCmd(undef, 'set prompt (gdb)\n');
-		if ($IS_MSWIN) {
-			execCmd(undef, 'set new-console on');
-		}
-		execCmd(undef, 'set print pretty on');
-		execCmd(undef, 'set breakpoint pending on');
-		execCmd(undef, 'set pagination off');
-	}
 }
 
 sub startVim

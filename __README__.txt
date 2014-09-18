@@ -14,8 +14,9 @@
 ==============================================================================
 1. Introduction					*vgdb*
 
-VGdb is a perl program that allows the use of vim as a front end to gdb. It
-both works on MS Windows and Linux. It both works in gvim and vim.
+VGdb is a perl application that enables vim as the front end of a debugger
+like gdb and perldb.
+It both works on MS Windows and Linux. It both works in gvim and vim.
 
 It opens a VGDB window in vim that allows user to type gdb command directly, 
 and gdb output is redirected to this windows.
@@ -59,11 +60,19 @@ You can directly type "gdb" in vi command line as it's set to be the abbreviatio
 
 	:gdb
 
+To debug a perl program: >
+
+	:VGdb hello.pl
+
+vgdb identifies the target file ('hello.pl') is perl application and starts
+perl debugger ('perl -d') internally.
+
 * method 2: Run vgdb (or vgdb.bat on Windows)
   it open gvim with the __VGDB__ window for gdb command: >
 	
 	$ vgdb
 	$ vgdb cpp1
+	$ vgdb hello.pl
 
 ==============================================================================
 4. Using vgdb							*vgdb-using*
@@ -80,6 +89,10 @@ are known as "vgdb" commands: >
 	.debug={0|1} - disable|enable to show debug info in vgdb
 	.ver  - show vgdb version info
 	.ju {pos} - jump to position (auto tbreak and allow cross-function)
+
+Such vgdb command is used by vgdb internally, don't run it manually! >
+
+	.init - get the init message 
 
 2) Press Enter or double click in the __VGDB__ window (vim normal mode).
 

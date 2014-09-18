@@ -200,11 +200,7 @@ function! VGdb_open()
 	
 	let s:vgdb_running = 1
 
-" 	if s:dbg == "gdb"
-" 		exe "normal I" . s:vgdb_prompt
-" 	else
-		call VGdb(".get") " get init msg
-" 	endif
+	call VGdb(".init") " get init msg
 	starti!
 	
 	"wincmd p
@@ -326,7 +322,7 @@ let s:callmap={
 \ }
 
 function! s:setdbg(dbg)
-	s:dbg = a:dbg
+	let s:dbg = a:dbg
 endf
 
 function! s:VGdb_cb_setbp(id, file, line, ...)
