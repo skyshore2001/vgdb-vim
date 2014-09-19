@@ -33,6 +33,20 @@ if (! $IS_MSWIN)
 }
 #}}}
 
+###### vgdb env options {{{
+while (my $opt = $ARGV[0]) {
+	# "-vgdb-{opt}:{value}", e.g. "-vgdb-port:32330"
+	if ($opt =~ /^-vgdb-(\w+)(?::(\S+))?$/) {
+		my ($k, $v) = ($1, $2 || 1);
+		$ENV{"VGDB_\U$k"} = $v;
+		shift @ARGV;
+	}
+	else {
+		last;
+	}
+}
+#}}}
+
 package CommInet; # {{{
 our $VGDB_PORT;
 if ($ENV{VGDB_PORT}) {
@@ -56,7 +70,7 @@ sub new # ({isclient=>0})
 			PeerAddr => '127.0.0.1',
 			PeerPort => $VGDB_PORT,
 			Proto => 'tcp',
-		) or die "cannot open socket: $!";
+		) or die "Cannot connect to vgdb. Please check if vgdb is listening on tcp:$VGDB_PORT! Failed";
 	}
 	else {
 		$this->{sock} = IO::Socket::INET->new (
@@ -203,17 +217,13 @@ sub parseGdbLine  # ($comm, $line, $hideout)
 	local $_ = $_[1];
 	my $hideout = $_[2];
 	my $cmd;
-	if (! defined($_)) {
-		$cmd = "quit()";
-		$hideout =1;
-	}
 	# set a BP:
 	# 'b main' -> 'Breakpoint 2 at 0x4013cb: file cpp1.cpp, line 13.'
 	# 'Breakpoint 2 (/home/builder/depot/BUSMB_B1/SBO/9.01_DEV/BuildBuilder/CreatorDll/TmScrParser.cpp:115) pending.'
 	# encounter a BP:
 	# 'Breakpoint 11, DBMCSqlStatement::ExecDirect (this=0x7fffffff9350, query=..., env=0x637760) at ../Infrastructure/Engines/DBM/__DBMC_Statement.cpp:178'
 	# 'Breakpoint 17 at 0x7fc3f1f8b523: B1FileWriter.cpp:268. (2 locations)'
-	elsif (/^Breakpoint (\d+) at [^:]+: file ([^,]+), line (\d+)/ || /^Breakpoint (\d+) \((..[^:]+):(\d+)\) (pending)./ || /^Breakpoint (\d+).* at (?:0x\S+ )?(..[^:]+):(\d+)/) {
+	if (/^Breakpoint (\d+) at [^:]+: file ([^,]+), line (\d+)/ || /^Breakpoint (\d+) \((..[^:]+):(\d+)\) (pending)./ || /^Breakpoint (\d+).* at (?:0x\S+ )?(..[^:]+):(\d+)/) {
 		my ($id, $f, $ln, $hint) = ($1, $2, $3, $4 || '');
 		$f =~ s/\\/\//g;
 		$cmd = "setbp($id, \"$f\", $ln, \"$hint\")";
@@ -351,11 +361,11 @@ sub mygetline # ($in, \$isEnd)
 
 # exec gdb command, write result to $comm
 # return undef - quit command
-sub execCmd # ($comm, $cmd, [$hideout=0])
+sub execCmd # ($comm, $cmd, [$hideout=0], [$noPrompt=0])
 {
-	my ($comm, $cmd, $hideout) = @_;
+	my ($comm, $cmd, $hideout, $noPrompt) = @_;
 	if (defined $cmd) {
-		$cmd = filterCmd($cmd);
+		$cmd = filterCmd($cmd, $comm);
 		print GDB_WR "$cmd\n";
 		msg "(gdb) '$cmd'\n";
 	}
@@ -363,12 +373,16 @@ sub execCmd # ($comm, $cmd, [$hideout=0])
 	while (defined ($_ = mygetline(\*GDB_RD, \$isEnd))) {
 		s/[\r\n]+$//;
 		msg ">>> '$_'\n", !/^\032/;
+		if ($isEnd) {
+			$comm->put($_) if $comm && !$noPrompt;
+			return 1;
+		}
 		parseGdbLine($comm, $_, $hideout);
-		return 1 if $isEnd;
 	}
 	
 	# gdb quits
-	parseGdbLine($comm, undef);
+	$comm->put("vi:quit()\n");
+	msg "=== 'vi:quit'\n";
 	return;
 }
 
@@ -480,7 +494,7 @@ L"3.141500", len=8
 # throw 'quit' if gdb quits; otherwize return the cmd result
 sub getCmdResult # ($commMem, $cmd)
 {
-	my $rv = execCmd($_[0], $_[1]);
+	my $rv = execCmd($_[0], $_[1], undef, 'noPrompt');
 	die 'quit' unless defined $rv; # encounter 'quit'
 	$_[0]->get();
 }
@@ -520,6 +534,10 @@ sub loadAutoexp
 sub execPreviewCmd # ($comm, $expr, $hideout)
 {
 	my ($comm, $expr, $hideout) = @_;
+	if ($DBG ne 'gdb') {
+		return execCmd($comm, "p $expr", $hideout);
+	}
+
 	my $commMem = CommMem->new();
 	my ($type, $isptr);
 	loadAutoexp();
@@ -529,7 +547,7 @@ sub execPreviewCmd # ($comm, $expr, $hideout)
 		$_ = getCmdResult($commMem, "whatis $expr");
 		return 1 if !$_;
 		mychop($_);
-		unless(/^type = (.*)$/) {
+		unless(/^type = (.*)$/m) {
 			$comm->put($_);
 			return 1;
 		}
