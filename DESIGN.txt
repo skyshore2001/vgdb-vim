@@ -1,0 +1,50 @@
+*) vgdb parameters
+vgdb [-vgdb-{env}] [-vi|-c] {target and parameters}
+
+-vgdb-{env} will overwritten envvar named "VGDB_{env}", e.g.
+	export VGDB_DEBUG=1
+	export VGDB_PORT=33089
+	vgdb cpp1 
+	=>
+	vgdb -vgdb-debug -vgdb-port:33333 cpp1
+-vi
+	a mark that indicates it's called by vi; ignore to start vi
+-c 
+	client mode
+
+*) Debug vgdb via log:
+
+Start vgdb in command mode:
+	export VGDB_PORT=44444
+	export VGDB_DEBUG=1
+	vgdb -vi cpp1
+or 
+	vgdb -vgdb-debug -vgdb-port:44444 -vi cpp1
+(set VGDB_DEBUG to use the fix port)
+
+Command from client side:
+	export VGDB_PORT=44444
+	vgdb -c ".init"
+	vgdb -c "b main; r; n"
+	vgdb -c ".p m"
+	vgdb -c "q"
+
+*) Debug vgdb via vgdb
+Start vgdb in command mode:
+	vgdb -vgdb-debug vgdb -vgdb-port:44444 -vi cpp1
+
+Note: 
+- outer vgdb debug the perl program 'vgdb' using a random port (as it's not specified in envvar or argument)
+- inner vgdb debug the C++ program 'cpp1' using port 44444 
+- Note: inner env will inherit outer env (e.g. -vgdb-debug is inheritted by inner)
+
+*) Abnormal quit or killed
+if no response from vgdb or vgdb is forcely killed, then it may not run, please try:
+kill process of: perl gdb vgdb gvim
+find and kill the program occupied the vgdb port: 
+	netstat -anp | grep 30899
+	(on windows, use "netstat -ano")
+	kill {pid}
+
+("netstat -p" is to show process id (pid) using the port, on MS Windows use "-o" instead)
+
