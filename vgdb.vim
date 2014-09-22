@@ -238,7 +238,9 @@ function! s:VGdb_goto(file, line)
 		endif
 	endif
 
-	"silent! foldopen!
+	if has('folding')
+		silent! foldopen!
+	endif
 	execute a:line
 	redraw
 "  	call winline()
