@@ -669,6 +669,13 @@ sub startGdb
 		}
 	}
 	elsif ($DBG eq 'perldb') {
+		# !!! set $TERM to disable the colored show
+		$ENV{TERM} = 'dumb';
+		if (!$IS_MSWIN) {
+			# !!! disable create new tty. according to source code of perl5db.pl:
+			# try to set $console = undef to disable new tty
+			$ENV{OS2_SHELL} = 'dumb';
+		}
 		my $script = shift @ARGV;
 		@cmd = ('perl', '-d', $script, '-emacs', @ARGV);
 	}
@@ -680,7 +687,7 @@ sub startGdb
 	msg "start $DBG: '" . join(' ', @cmd) . "'\n";
 	my $gdb_task = open3(\*GDB_WR, \*GDB_RD, \*GDB_RD, @cmd)
 		or die("start $DBG error: $!\n");
-	select(GDB_WR);    $| = 1; # make unbuffered
+	my $p = select(GDB_WR); $| = 1; select($p); # make unbuffered
 }
 
 sub startVim
