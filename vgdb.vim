@@ -238,10 +238,10 @@ function! s:VGdb_goto(file, line)
 		endif
 	endif
 
+	execute a:line
 	if has('folding')
 		silent! foldopen!
 	endif
-	execute a:line
 	redraw
 "  	call winline()
 endf
@@ -325,6 +325,9 @@ let s:callmap={
 
 function! s:setdbg(dbg)
 	let s:dbg = a:dbg
+	if s:dbg == "perldb"
+		let s:vgdb_prompt = "  DB<1> "
+	endif
 endf
 
 function! s:VGdb_cb_setbp(id, file, line, ...)
@@ -495,7 +498,7 @@ function! VGdb(cmd, ...)  " [mode]
 			call append('$', s:vgdb_prompt . usercmd)
 			$
 		else
-			exe "normal I" . s:vgdb_prompt
+			exe "normal 0i" . s:vgdb_prompt
 		endif
 	endif
 	" goto frame
@@ -517,6 +520,14 @@ function! VGdb(cmd, ...)  " [mode]
 	" Breakpoint 6 (/home/builder/depot/BUSMB_B1/SBO/9.01_DEV/BuildBuilder/CreatorDll/RDLL_SboP.cpp:92) pending.
 	" Breakpoint 17 at 0x7fc3f1f8b523: B1FileWriter.cpp:268. (2 locations)
 	elseif s:mymatch(usercmd, '\v<at %(0x\S+ )?(..[^:]*):(\d+)') || s:mymatch(usercmd, '\vfile ([^,]+), line (\d+)') || s:mymatch(usercmd, '\v\((..[^:]*):(\d+)\)')
+		call s:VGdb_goto(s:match[1], s:match[2])
+		return
+	" for perldb:
+	"   @ = main::getElems(...) called from file `./parse_vc10.pl' line 207
+	" Note: On windows: perldb uses "'" rather than "`"
+	" 	DB::eval called at /usr/lib/perl5/5.10.0/perl5db.pl line 3436
+	"   syntax error at (eval 9)[C:/Perl/lib/perl5db.pl:646] line 2, near "frame 0"
+	elseif s:mymatch(usercmd, '\v from file [`'']([^'']+)'' line (\d+)') || s:mymatch(usercmd, '\v at ([^ ]+) line (\d+)') || s:mymatch(usercmd, '\v at \(eval \d+\)(..[^:]+):(\d+)')
 		call s:VGdb_goto(s:match[1], s:match[2])
 		return
 	elseif mode == 'n'  " mode n: jump to source or current callstack, dont exec other gdb commands
@@ -613,13 +624,21 @@ function! s:VGdb_shortcuts()
 	" syntax
 	syn keyword vgdbKey Function Breakpoint Catchpoint 
 	syn match vgdbFrame /\v^#\d+ .*/ contains=vgdbGoto
-	syn match vgdbGoto /\v<at .+:\d+|file .+, line \d+/
+	syn match vgdbGoto /\v<at [^()]+:\d+|file .+, line \d+/
 	syn match vgdbCmd /^(gdb).*/
 	syn match vgdbPtr /\v(^|\s+)\zs\$?\w+ \=.{-0,} 0x\w+/
 	" highlight the whole line for 
 	" returns for info threads | info break | finish | watchpoint
 	syn match vgdbHiLn /\v^\s*(Id\s+Target Id|Num\s+Type|Value returned is|(Old|New) value =|Hardware watchpoint).*$/
 
+	" syntax for perldb
+	syn match vgdbCmd /^\s*DB<.*/
+"	syn match vgdbFrame /\v^#\d+ .*/ contains=vgdbGoto
+	syn match vgdbGoto /\v from file ['`].+' line \d+/
+	syn match vgdbGoto /\v at ([^ ]+) line (\d+)/
+	syn match vgdbGoto /\v at \(eval \d+\)..[^:]+:\d+/
+
+	
 	" shortcut in VGDB window
     inoremap <buffer> <silent> <CR> <c-o>:call VGdb(getline('.'), 'i')<cr>
 	imap <buffer> <silent> <2-LeftMouse> <cr>

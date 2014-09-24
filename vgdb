@@ -31,6 +31,8 @@ if (! $IS_MSWIN)
 		$TTY = "";
 	}
 }
+
+$| = 1;
 #}}}
 
 ###### vgdb env options {{{
@@ -212,7 +214,8 @@ my $is_debugging = 0;
 sub parseGdbLine  # ($comm, $line, $hideout)
 {
 	my $comm = $_[0];
-	return unless defined $comm;
+	my $cnt = 0;
+	return $cnt unless defined $comm;
 
 	local $_ = $_[1];
 	my $hideout = $_[2];
@@ -259,18 +262,25 @@ sub parseGdbLine  # ($comm, $line, $hideout)
 		$cmd = "exe(\"cd $d\")";
 	}
 	# 'r' -> 'C:\Users\i058537\cpp1.cpp:13:191:beg:0x4013cb'
-	elsif (/^\032\032(..[^:]*):(\d+)/) {
+	elsif (/\032\032(..[^:]*):(\d+)/) {
 		my ($f, $ln) = ($1, $2);
 		$f =~ s/\\/\//g;
 		$cmd = "setpos(\"$f\", $ln)";
 		$hideout =1;
 		$is_debugging = 1;
+
+		# bugfix: should be 2 lines but in 1 line, e.g. "hello\032\032..."
+		if (! /^\032/) {
+			s/\032.*$//;
+			$hideout = 0;
+		}
 	}
-	$comm->put("$_\n") unless $hideout;
+	do { $comm->put("$_\n"); ++ $cnt } unless $hideout;
 	if (defined $cmd) {
 		$comm->put("vi:$cmd\n");
 		msg "=== 'vi:$cmd'\n";
 	}
+	$cnt;
 }
 
 # for perldb
@@ -297,6 +307,9 @@ sub filterCmd # ($cmd, $comm)
 		}
 		elsif ($cmd eq 'cont' || $cmd eq 'continue') {
 			$cmd = 'c';
+		}
+		elsif ($cmd eq 'i br' || $cmd eq 'info break') {
+			$cmd = 'L';
 		}
 		else {
 			my ($id, $f, $ln, $hint);
@@ -361,23 +374,27 @@ sub mygetline # ($in, \$isEnd)
 
 # exec gdb command, write result to $comm
 # return undef - quit command
-sub execCmd # ($comm, $cmd, [$hideout=0], [$noPrompt=0])
+# *** ignore the prompt-only response.
+my $lastPrompt = '';
+sub execCmd # ($comm, $cmd, [$hideout=0])
 {
-	my ($comm, $cmd, $hideout, $noPrompt) = @_;
+	my ($comm, $cmd, $hideout) = @_;
 	if (defined $cmd) {
 		$cmd = filterCmd($cmd, $comm);
 		print GDB_WR "$cmd\n";
 		msg "(gdb) '$cmd'\n";
 	}
 	my $isEnd = 0;
+	my $cnt = 0;
 	while (defined ($_ = mygetline(\*GDB_RD, \$isEnd))) {
 		s/[\r\n]+$//;
 		msg ">>> '$_'\n", !/^\032/;
 		if ($isEnd) {
-			$comm->put($_) if $comm && !$noPrompt;
+			do { $comm->put($_); $lastPrompt = $_ }
+				if $comm && ($cnt > 0 || $_ ne $lastPrompt);
 			return 1;
 		}
-		parseGdbLine($comm, $_, $hideout);
+		$cnt += parseGdbLine($comm, $_, $hideout);
 	}
 	
 	# gdb quits
@@ -464,6 +481,9 @@ sub execVgdbCmd # ($comm, $cmd, [$hideout=0])
 			execCmd(undef, 'set breakpoint pending on');
 			execCmd(undef, 'set pagination off');
 		}
+		else {
+			execCmd(undef, '$| = 1');
+		}
 	}
 	else {
 		$comm->put("!!! unknown vgdb command: '$cmd'\n");
@@ -494,7 +514,7 @@ L"3.141500", len=8
 # throw 'quit' if gdb quits; otherwize return the cmd result
 sub getCmdResult # ($commMem, $cmd)
 {
-	my $rv = execCmd($_[0], $_[1], undef, 'noPrompt');
+	my $rv = execCmd($_[0], $_[1]);
 	die 'quit' unless defined $rv; # encounter 'quit'
 	$_[0]->get();
 }
