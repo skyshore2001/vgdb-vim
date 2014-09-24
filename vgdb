@@ -412,7 +412,7 @@ sub execCmd # ($comm, $cmd, [$hideout=0], [$noPrompt=0])
 				$lastPrompt = $_;
 			}
 			# post action
-			if ($DBG eq 'perldb') {
+			if (defined $cmd && $DBG eq 'perldb') {
 				# restart 
 				if ($cmd eq 'R') {
 					initDebug($comm);
