@@ -283,6 +283,22 @@ sub parseGdbLine  # ($comm, $line, $hideout)
 	$cnt;
 }
 
+sub initDebug # ($comm)
+{
+	if ($DBG eq 'gdb') {
+#			execCmd(undef, 'set prompt (gdb)\n');
+		if ($IS_MSWIN) {
+			execCmd(undef, 'set new-console on');
+		}
+		execCmd(undef, 'set print pretty on');
+		execCmd(undef, 'set breakpoint pending on');
+		execCmd(undef, 'set pagination off');
+	}
+	else {
+		execCmd(undef, '$| = 1');
+	}
+}
+
 # for perldb
 my %BP;
 my $BP_N = 1;
@@ -395,6 +411,13 @@ sub execCmd # ($comm, $cmd, [$hideout=0], [$noPrompt=0])
 				$comm->put($_);
 				$lastPrompt = $_;
 			}
+			# post action
+			if ($DBG eq 'perldb') {
+				# restart 
+				if ($cmd eq 'R') {
+					initDebug($comm);
+				}
+			}
 			return 1;
 		}
 		$cnt += parseGdbLine($comm, $_, $hideout);
@@ -474,19 +497,7 @@ sub execVgdbCmd # ($comm, $cmd, [$hideout=0])
 	elsif ($cmd eq 'init') {
 		$comm->put("vi:setdbg(\"$DBG\")\n");
 		$rv = execCmd($comm, undef); # no cmd, just get e.g. the init msg
-
-		if ($DBG eq 'gdb') {
-#			execCmd(undef, 'set prompt (gdb)\n');
-			if ($IS_MSWIN) {
-				execCmd(undef, 'set new-console on');
-			}
-			execCmd(undef, 'set print pretty on');
-			execCmd(undef, 'set breakpoint pending on');
-			execCmd(undef, 'set pagination off');
-		}
-		else {
-			execCmd(undef, '$| = 1');
-		}
+		initDebug($comm);
 	}
 	else {
 		$comm->put("!!! unknown vgdb command: '$cmd'\n");
