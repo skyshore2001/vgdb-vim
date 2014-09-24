@@ -329,6 +329,8 @@ function! s:setdbg(dbg)
 	let s:dbg = a:dbg
 	if s:dbg == "perldb"
 		let s:vgdb_prompt = "  DB<1> "
+	elseif s:dbg == 'gdb'
+		let s:vgdb_prompt = "(gdb) "
 	endif
 endf
 

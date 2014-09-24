@@ -726,14 +726,19 @@ sub startGdb
 
 sub startVim
 {
-use threads;
-	#my $VIM_EXE = 'gvim --nofork';
-	my $VIM_EXE = 'gvim -f';
-	# !!! use -f for --nofork because if on MSWin32 vim installs a gvim.bat that does not support --nofork.
+# use threads;
+	my $VIM_EXE = 'gvim';
 	msg "starting VIM.\n";
-	threads->new(sub {
-		system($VIM_EXE . ' -c "call VGdb_open()"');
-	})->detach();
+# 	threads->new(sub {
+		my $cmd = $VIM_EXE . ' -c "call VGdb_open()"';
+		if ($IS_MSWIN) {
+			$cmd = "start $cmd";
+		}
+		else {
+			$cmd .= " &";
+		}
+		system($cmd);
+# 	})->detach();
 }
 #}}}
 
