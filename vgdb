@@ -376,9 +376,9 @@ sub mygetline # ($in, \$isEnd)
 # return undef - quit command
 # *** ignore the prompt-only response.
 my $lastPrompt = '';
-sub execCmd # ($comm, $cmd, [$hideout=0])
+sub execCmd # ($comm, $cmd, [$hideout=0], [$noPrompt=0])
 {
-	my ($comm, $cmd, $hideout) = @_;
+	my ($comm, $cmd, $hideout, $noPrompt) = @_;
 	if (defined $cmd) {
 		$cmd = filterCmd($cmd, $comm);
 		print GDB_WR "$cmd\n";
@@ -390,8 +390,11 @@ sub execCmd # ($comm, $cmd, [$hideout=0])
 		s/[\r\n]+$//;
 		msg ">>> '$_'\n", !/^\032/;
 		if ($isEnd) {
-			do { $comm->put($_); $lastPrompt = $_ }
-				if $comm && ($cnt > 0 || $_ ne $lastPrompt);
+			if ($comm && !$hideout && !$noPrompt && ($cnt > 0 || $_ ne $lastPrompt))
+			{
+				$comm->put($_);
+				$lastPrompt = $_;
+			}
 			return 1;
 		}
 		$cnt += parseGdbLine($comm, $_, $hideout);
@@ -514,7 +517,7 @@ L"3.141500", len=8
 # throw 'quit' if gdb quits; otherwize return the cmd result
 sub getCmdResult # ($commMem, $cmd)
 {
-	my $rv = execCmd($_[0], $_[1]);
+	my $rv = execCmd($_[0], $_[1], undef, 'noPrompt');
 	die 'quit' unless defined $rv; # encounter 'quit'
 	$_[0]->get();
 }

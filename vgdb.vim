@@ -20,6 +20,8 @@ let s:vgdb_bufname = "__VGDB__"
 let s:vgdb_prompt = '(gdb) '
 let s:dbg = 'gdb'
 
+let s:perldbPromptRE = '^\s*DB<\+\d\+>\+\s*'
+
 " used by system-call style
 let s:vgdb_client = "vgdb -c" " on MSWin, actually the vgdb.bat is called in the search path
 " used by libcall style
@@ -492,13 +494,16 @@ function! VGdb(cmd, ...)  " [mode]
 	if s:dbg == 'gdb' && usercmd =~ '^\s*(gdb)' 
 		let usercmd = substitute(usercmd, '^\s*(gdb)\s*', '', '')
 	elseif s:dbg == 'perldb' && usercmd =~ '^\s*DB<'
-		let usercmd = substitute(usercmd, '^\s*DB<\+\d\+>\+\s*', '', '')
+		let usercmd = substitute(usercmd, s:perldbPromptRE, '', '')
 	elseif mode == 'i'
+		" trim left and clean the search word
+		s/^\s\+//e
+		let @/=''
 		if line('.') != line('$')
 			call append('$', s:vgdb_prompt . usercmd)
 			$
 		else
-			exe "normal 0i" . s:vgdb_prompt
+			exe "normal I" . s:vgdb_prompt
 		endif
 	endif
 	" goto frame
@@ -562,10 +567,13 @@ function! VGdb(cmd, ...)  " [mode]
 			"let output_{out_count} = substitute(line, "", "", "g")
 		endif
 	endfor
+	if s:dbg == 'perldb' && line =~ s:perldbPromptRE
+		let s:vgdb_prompt = line
+	endif
 
 	if mode == 'i' && !stayInTgtWin
 		call s:gotoGdbWin()
-		if s:dbg == 'gdb' && getline('$') != s:vgdb_prompt
+		if getline('$') != s:vgdb_prompt
 			call append('$', s:vgdb_prompt)
 		endif
 		$
