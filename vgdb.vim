@@ -52,10 +52,10 @@ let s:set_disabled_bp = 0
 " ====== syntax {{{
 highlight DebugBreak guibg=darkred guifg=white ctermbg=darkred ctermfg=white
 highlight DisabledBreak guibg=lightred guifg=black ctermbg=lightred ctermfg=black
-sign define breakpoint linehl=DebugBreak
-sign define disabledbp linehl=DisabledBreak
+sign define vgdbBreakpoint linehl=DebugBreak text=B> 
+sign define vgdbDisabledbp linehl=DisabledBreak text=b> 
 " sign define current linehl=DebugStop
-sign define current linehl=Search text=>> texthl=Search
+sign define vgdbCurrent linehl=Search text=>> texthl=Search
 
 " highlight vgdbGoto guifg=Blue
 hi def link vgdbKey Statement
@@ -123,7 +123,7 @@ function! s:VGdb_curpos()
 endf
 
 function! s:placebp(id, line, bnr, disabled)
-	let name = (!a:disabled)? "breakpoint": "disabledbp"
+	let name = (!a:disabled)? "vgdbBreakpoint": "vgdbDisabledbp"
 	execute "sign place " . a:id . " name=" . name . " line=" . a:line. " buffer=" . a:bnr
 endf
 
@@ -380,7 +380,7 @@ function! s:VGdb_cb_setpos(file, line)
 	" place the next line before unplacing the previous 
 	" otherwise display will jump
 	let newid = (s:last_id+1) % 2
-	execute "sign place " .  (10000+newid) ." name=current line=".a:line." buffer=".bufnr(a:file)
+	execute "sign place " .  (10000+newid) ." name=vgdbCurrent line=".a:line." buffer=".bufnr(a:file)
 	execute "sign unplace ". (10000+s:last_id)
 	let s:last_id = newid
 endf

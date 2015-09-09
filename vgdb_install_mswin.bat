@@ -9,13 +9,13 @@ set VIMFILES=D:\vim\vimfiles
 gdb -v >NUL 2>NUL
 if not %errorlevel%==0 (
 	echo ERROR: 'gdb' does not in binary path!
-	goto :EOF
+	goto :END
 )
 
 gvim -c q 2>NUL
 if not %errorlevel%==0 (
 	echo ERROR: 'gvim' does not in binary path!
-	goto :EOF
+	goto :END
 )
 
 set PERL=perl
@@ -54,4 +54,5 @@ if "%opt%"=="y" (
 	echo done.
 )
 
+:END
 pause
